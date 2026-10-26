@@ -66,6 +66,42 @@ uv run bvb risk "TLV=0.3,SNP=0.25,H2O=0.25,ARS=0.1,CRC=0.1" --value 200000 --hor
 - Lichiditate: zile necesare vânzării fiecărei poziții la max. 20% din valoarea medie zilnică (`--participation`).
 - VaR-ul istoric reflectă doar fereastra aleasă (`--years`); o fereastră fără crize subestimează riscul — compară cu scenariile de stres.
 
+## Date fundamentale și evaluare
+
+```bash
+uv run bvb ingest fundamentals                    # situatii financiare anuale 2008+ (data.gov.ro, CC-BY 4.0)
+uv run bvb fundamentals SNP                       # istoric financiar, ROE, marja, payout, multipli actuali
+uv run bvb valuation --sort pe --min-traded 0.8   # multipli pentru toata piata
+```
+
+- Situațiile de pe data.gov.ro sunt **individuale** (nu consolidate): pentru holdinguri (ex. Electrica, MedLife) multiplii nu reflectă grupul.
+- Exercițiul N e considerat disponibil din 1 iunie N+1; capitalizarea istorică folosește numărul de acțiuni ajustat pentru evenimentele de capital.
+- Valorile indicatorilor de pe paginile BVB „Indicatori financiari” sunt afișate ca imagini (protecție anti-extragere) și nu sunt folosite.
+
+## Anunțuri, calendar, știri
+
+```bash
+uv run bvb watch add TLV SNP H2O                  # lista de urmarire
+uv run bvb ingest reports --windows 3             # rapoarte curente, toti emitentii (~10 zile / fereastra)
+uv run bvb ingest news                            # RSS ZF + Profit.ro, etichetate cu emitentii
+uv run bvb ingest report-texts                    # text din PDF-urile rapoartelor (lista de urmarire)
+uv run bvb reports -w --category insider          # categorii: insider, results, agm, dividend, buyback, nav, ...
+uv run bvb reports --search "dividend special"
+uv run bvb calendar -w --days 30                  # rezultate, AGA, date ex-dividend
+uv run bvb news -w
+```
+
+## Dashboard, alerte, rulare zilnică
+
+```bash
+uv run bvb dashboard                              # http://localhost:8501 (Emitent, Screener, Portofoliu, Calendar)
+uv run bvb alerts --notify                        # anunturi noi, ex-dividend in 7 zile, miscari > 5%
+uv run bvb daily                                  # dupa 18:30: preturi, rapoarte, stiri, ajustari, alerte
+uv run bvb daily --full                           # saptamanal: + istoric grafic, indici, fise emitenti
+```
+
+DuckDB permite un singur proces care scrie: oprește dashboard-ul în timpul colectărilor.
+
 ## Teste
 
 ```bash

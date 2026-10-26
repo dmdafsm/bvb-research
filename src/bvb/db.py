@@ -101,6 +101,78 @@ CREATE TABLE IF NOT EXISTS capital_changes (
     nominal_after  DOUBLE
 );
 
+-- Situatii financiare anuale individuale (data.gov.ro).
+CREATE TABLE IF NOT EXISTS fundamentals (
+    symbol        VARCHAR NOT NULL,
+    year          INTEGER NOT NULL,
+    kind          VARCHAR NOT NULL,   -- IR | BL | UU | BANK | SIF | ASIG | VS
+    cui           VARCHAR,
+    caen          VARCHAR,
+    revenue       DOUBLE,             -- cifra de afaceri neta
+    total_revenue DOUBLE,
+    net_profit    DOUBLE,
+    equity        DOUBLE,
+    total_assets  DOUBLE,
+    debts         DOUBLE,
+    cash          DOUBLE,
+    employees     DOUBLE,
+    PRIMARY KEY (symbol, year, kind)
+);
+
+CREATE TABLE IF NOT EXISTS fundamentals_raw (
+    symbol VARCHAR, year INTEGER, kind VARCHAR, label VARCHAR, value DOUBLE
+);
+
+-- Un rand pe an si emitent (daca apare in mai multe fisiere, IFRS / banci / SIF au prioritate).
+CREATE OR REPLACE VIEW fundamentals_annual AS
+SELECT * EXCLUDE (rn) FROM (
+    SELECT *, row_number() OVER (PARTITION BY symbol, year ORDER BY
+        CASE kind WHEN 'IR' THEN 0 WHEN 'BANK' THEN 1 WHEN 'SIF' THEN 2 WHEN 'ASIG' THEN 3
+                  WHEN 'VS' THEN 4 WHEN 'BL' THEN 5 ELSE 6 END) AS rn
+    FROM fundamentals
+) WHERE rn = 1;
+
+-- Rapoarte curente / anunturi ale emitentilor (bvb.ro).
+CREATE TABLE IF NOT EXISTS reports (
+    symbol    VARCHAR NOT NULL,
+    published TIMESTAMP NOT NULL,
+    title     VARCHAR NOT NULL,
+    category  VARCHAR,           -- dedusa din titlu: insider, dividend, results, agm, ...
+    bvb_type  VARCHAR,           -- tipul afisat de BVB (pagina globala)
+    url_ro    VARCHAR,
+    url_en    VARCHAR,
+    text      VARCHAR,           -- textul extras din PDF (doar pentru lista de urmarire)
+    PRIMARY KEY (symbol, published, title)
+);
+
+CREATE TABLE IF NOT EXISTS calendar (
+    symbol VARCHAR NOT NULL,
+    date   DATE NOT NULL,
+    kind   VARCHAR,              -- financial | agm
+    event  VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS news (
+    url       VARCHAR PRIMARY KEY,
+    source    VARCHAR,
+    published TIMESTAMP,
+    title     VARCHAR,
+    summary   VARCHAR,
+    symbols   VARCHAR[]          -- emitentii mentionati
+);
+
+CREATE TABLE IF NOT EXISTS watchlist (
+    symbol VARCHAR PRIMARY KEY,
+    added  TIMESTAMP DEFAULT now()
+);
+
+-- Calculate de `bvb adjust`.
+CREATE TABLE IF NOT EXISTS prices_adj (
+    date DATE, symbol VARCHAR, close DOUBLE, cap_factor DOUBLE, div_factor DOUBLE,
+    adj_close DOUBLE, tr_close DOUBLE, PRIMARY KEY (date, symbol)
+);
+CREATE TABLE IF NOT EXISTS adjust_events (symbol VARCHAR, date DATE, kind VARCHAR, ratio DOUBLE);
+
 CREATE SEQUENCE IF NOT EXISTS ingest_log_seq;
 CREATE TABLE IF NOT EXISTS ingest_log (
     id          BIGINT DEFAULT nextval('ingest_log_seq') PRIMARY KEY,
@@ -124,7 +196,9 @@ SELECT * EXCLUDE (rn) FROM (
 """
 
 
-def connect(path=DB_PATH) -> duckdb.DuckDBPyConnection:
+def connect(path=DB_PATH, read_only: bool = False) -> duckdb.DuckDBPyConnection:
+    if read_only:
+        return duckdb.connect(str(path), read_only=True)
     path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(path))
     con.execute(SCHEMA)
