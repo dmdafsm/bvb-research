@@ -4,7 +4,7 @@ Citeste copia `bvb_read.duckdb`, publicata la finalul fiecarei comenzi care scri
 deci merge si in timpul colectarilor; cand apare o copie noua, se redeschide singur.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -16,8 +16,10 @@ from bvb.config import READ_PATH
 st.set_page_config(page_title="BVB Research", layout="wide")
 
 if not READ_PATH.exists():
-    st.error("Nu exista inca o copie a bazei pentru citire. Ruleaza o colectare (ex. `uv run bvb status`) "
-             "sau `uv run bvb snapshot`.")
+    st.error(
+        "Nu exista inca o copie a bazei pentru citire. Ruleaza o colectare (ex. `uv run bvb status`) "
+        "sau `uv run bvb snapshot`."
+    )
     st.stop()
 
 VERSION = READ_PATH.stat().st_mtime  # cheia cache-urilor: se schimba la fiecare copie noua
@@ -66,19 +68,26 @@ def normalized_chart(series: dict[str, pd.Series], title: str, log: bool = False
         if s.empty:
             continue
         fig.add_trace(go.Scatter(x=s.index, y=s / s.iloc[0] * 100, name=name, mode="lines"))
-    fig.update_layout(title=title, height=420, margin=dict(l=10, r=10, t=40, b=10),
-                      yaxis_type="log" if log else "linear", legend=dict(orientation="h"))
+    fig.update_layout(
+        title=title,
+        height=420,
+        margin=dict(l=10, r=10, t=40, b=10),
+        yaxis_type="log" if log else "linear",
+        legend=dict(orientation="h"),
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 
 # --- pagini ----------------------------------------------------------------------
 
+
 def page_stock():
     inst = instruments(VERSION)
     labels = {r.symbol: f"{r.symbol} — {r.name}" for r in inst.itertuples()}
     default = watchlist(VERSION)[0] if watchlist(VERSION) else "TLV"
-    symbol = st.sidebar.selectbox("Emitent", list(labels), index=list(labels).index(default) if default in labels else 0,
-                                  format_func=labels.get)
+    symbol = st.sidebar.selectbox(
+        "Emitent", list(labels), index=list(labels).index(default) if default in labels else 0, format_func=labels.get
+    )
     years = st.sidebar.select_slider("Perioada grafic (ani)", options=[1, 3, 5, 10, 20, 30], value=5)
 
     try:
@@ -100,16 +109,24 @@ def page_stock():
     tr = analytics.series(con, [symbol], start=start)[symbol]
     px = analytics.series(con, [symbol], field="adj_close", start=start)[symbol]
     bench = analytics.benchmark_series(con, start=start)
-    normalized_chart({f"{symbol} randament total": tr, f"{symbol} pret ajustat": px, "BET-TR": bench},
-                     "Evolutie (baza 100)", log=years >= 10)
+    normalized_chart(
+        {f"{symbol} randament total": tr, f"{symbol} pret ajustat": px, "BET-TR": bench},
+        "Evolutie (baza 100)",
+        log=years >= 10,
+    )
 
     w = rep["windows"].T
-    show = pd.DataFrame({
-        "Randament total/an": w["cagr"].map(pct), "Pret/an": w["price_cagr"].map(pct),
-        "BET-TR/an": w["bench_cagr"].map(pct), "Volatilitate": w["volatility"].map(pct),
-        "Sharpe": w["sharpe"].map(lambda x: f"{x:.2f}"), "Max drawdown": w["max_drawdown"].map(pct),
-        "Beta": w["beta"].map(lambda x: f"{x:.2f}"),
-    })
+    show = pd.DataFrame(
+        {
+            "Randament total/an": w["cagr"].map(pct),
+            "Pret/an": w["price_cagr"].map(pct),
+            "BET-TR/an": w["bench_cagr"].map(pct),
+            "Volatilitate": w["volatility"].map(pct),
+            "Sharpe": w["sharpe"].map(lambda x: f"{x:.2f}"),
+            "Max drawdown": w["max_drawdown"].map(pct),
+            "Beta": w["beta"].map(lambda x: f"{x:.2f}"),
+        }
+    )
     st.subheader("Randament si risc")
     st.dataframe(show, use_container_width=True)
 
@@ -121,47 +138,70 @@ def page_stock():
             st.info("Nu exista situatii financiare pe data.gov.ro pentru acest CUI.")
         else:
             f = f.tail(8)
-            tbl = pd.DataFrame({
-                "Cifra afaceri (mil.)": f["revenue"] / 1e6, "Profit net (mil.)": f["net_profit"] / 1e6,
-                "Capitaluri (mil.)": f["equity"] / 1e6, "ROE": f["roe"].map(pct), "Marja neta": f["net_margin"].map(pct),
-                "Datorii/capitaluri": f["debt_to_equity"].round(2), "Payout": f["payout"].map(pct),
-            }).T
+            tbl = pd.DataFrame(
+                {
+                    "Cifra afaceri (mil.)": f["revenue"] / 1e6,
+                    "Profit net (mil.)": f["net_profit"] / 1e6,
+                    "Capitaluri (mil.)": f["equity"] / 1e6,
+                    "ROE": f["roe"].map(pct),
+                    "Marja neta": f["net_margin"].map(pct),
+                    "Datorii/capitaluri": f["debt_to_equity"].round(2),
+                    "Payout": f["payout"].map(pct),
+                }
+            ).T
             st.dataframe(tbl, use_container_width=True)
             m = valuation.current_multiples(con, [symbol])
             if len(m):
                 r = m.iloc[0]
-                st.caption(f"Exercitiul {r['fiscal_year']}: P/E {r['pe']:.1f} · P/B {r['pb']:.2f} · "
-                           f"P/S {r['ps']:.2f} · P/E vs. ultimii 10 ani: percentila {pct(r['pe_pctile_10y'], 0)}")
+                st.caption(
+                    f"Exercitiul {r['fiscal_year']}: P/E {r['pe']:.1f} · P/B {r['pb']:.2f} · "
+                    f"P/S {r['ps']:.2f} · P/E vs. ultimii 10 ani: percentila {pct(r['pe_pctile_10y'], 0)}"
+                )
             hist = valuation.multiples_history(con, symbol)
             if len(hist):
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(x=hist.index, y=hist["pe"], name="P/E"))
                 fig.add_trace(go.Scatter(x=hist.index, y=hist["pb"], name="P/B", yaxis="y2"))
-                fig.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10), title="Multipli istorici",
-                                  yaxis2=dict(overlaying="y", side="right"), legend=dict(orientation="h"))
+                fig.update_layout(
+                    height=300,
+                    margin=dict(l=10, r=10, t=30, b=10),
+                    title="Multipli istorici",
+                    yaxis2=dict(overlaying="y", side="right"),
+                    legend=dict(orientation="h"),
+                )
                 st.plotly_chart(fig, use_container_width=True)
     with right:
         st.subheader("Dividende")
         st.dataframe(rep["dividends"], use_container_width=True, hide_index=True)
         st.subheader("Calendar")
-        cal = con.execute("SELECT date, kind, event FROM calendar WHERE symbol = ? AND date >= current_date "
-                          "ORDER BY date", [symbol]).df()
+        cal = con.execute(
+            "SELECT date, kind, event FROM calendar WHERE symbol = ? AND date >= current_date ORDER BY date", [symbol]
+        ).df()
         st.dataframe(cal, use_container_width=True, hide_index=True)
 
     st.subheader("Rapoarte curente")
-    cats = ["toate"] + [r[0] for r in con.execute(
-        "SELECT DISTINCT category FROM reports WHERE symbol = ? ORDER BY 1", [symbol]).fetchall()]
+    cats = ["toate"] + [
+        r[0]
+        for r in con.execute("SELECT DISTINCT category FROM reports WHERE symbol = ? ORDER BY 1", [symbol]).fetchall()
+    ]
     cat = st.selectbox("Categorie", cats)
     rows = con.execute(
         "SELECT published, category, title, url_ro FROM reports WHERE symbol = ? AND (? = 'toate' OR category = ?) "
-        "ORDER BY published DESC LIMIT 100", [symbol, cat, cat]).df()
-    st.dataframe(rows, use_container_width=True, hide_index=True,
-                 column_config={"url_ro": st.column_config.LinkColumn("PDF")})
+        "ORDER BY published DESC LIMIT 100",
+        [symbol, cat, cat],
+    ).df()
+    st.dataframe(
+        rows, use_container_width=True, hide_index=True, column_config={"url_ro": st.column_config.LinkColumn("PDF")}
+    )
     st.subheader("Stiri")
-    news = con.execute("SELECT published, source, title, url FROM news WHERE list_contains(symbols, ?) "
-                       "ORDER BY published DESC LIMIT 30", [symbol]).df()
-    st.dataframe(news, use_container_width=True, hide_index=True,
-                 column_config={"url": st.column_config.LinkColumn("Link")})
+    news = con.execute(
+        "SELECT published, source, title, url FROM news WHERE list_contains(symbols, ?) "
+        "ORDER BY published DESC LIMIT 30",
+        [symbol],
+    ).df()
+    st.dataframe(
+        news, use_container_width=True, hide_index=True, column_config={"url": st.column_config.LinkColumn("Link")}
+    )
 
 
 @st.cache_data(max_entries=8)
@@ -181,10 +221,24 @@ def page_screen():
     df = screen_table(market, years, VERSION)
     df = df[df["pct_days_traded"].fillna(0) >= min_traded]
     st.caption(f"{len(df)} actiuni · randament total vs BET-TR · multipli pe ultimul exercitiu (situatii individuale)")
-    pct_cols = ["cagr", "volatility", "max_drawdown", "div_yield", "pct_days_traded", "roe", "net_margin", "pe_pctile_10y"]
-    st.dataframe(df.style.format({c: "{:.1%}" for c in pct_cols if c in df} |
-                                 {c: "{:,.2f}" for c in df.columns if c not in pct_cols}, na_rep="–"),
-                 use_container_width=True, height=700)
+    pct_cols = [
+        "cagr",
+        "volatility",
+        "max_drawdown",
+        "div_yield",
+        "pct_days_traded",
+        "roe",
+        "net_margin",
+        "pe_pctile_10y",
+    ]
+    st.dataframe(
+        df.style.format(
+            {c: "{:.1%}" for c in pct_cols if c in df} | {c: "{:,.2f}" for c in df.columns if c not in pct_cols},
+            na_rep="–",
+        ),
+        use_container_width=True,
+        height=700,
+    )
 
 
 def page_portfolio():
@@ -199,8 +253,9 @@ def page_portfolio():
         st.info("Introdu simboluri, ex. 'TLV=0.4, SNP=0.3, H2O=0.3'.")
         return
     try:
-        res = portfolio.backtest(con, portfolio.Config(weights=weights, start=start, capital=value,
-                                                       rebalance=rebalance, fee=fee))
+        res = portfolio.backtest(
+            con, portfolio.Config(weights=weights, start=start, capital=value, rebalance=rebalance, fee=fee)
+        )
     except ValueError as e:
         st.error(str(e))
         return
@@ -213,8 +268,10 @@ def page_portfolio():
     c[2].metric("Volatilitate", pct(m["volatility"]))
     c[3].metric("Max drawdown", pct(m["max_drawdown"]))
     c[4].metric("Sharpe", f"{m['sharpe']:.2f}")
-    st.caption(f"BET-TR: valoare finala {res.benchmark.iloc[-1]:,.0f} · CAGR {pct(m['bench_cagr'])} · "
-               f"volatilitate {pct(m['bench_volatility'])} · max drawdown {pct(m['bench_max_drawdown'])}")
+    st.caption(
+        f"BET-TR: valoare finala {res.benchmark.iloc[-1]:,.0f} · CAGR {pct(m['bench_cagr'])} · "
+        f"volatilitate {pct(m['bench_volatility'])} · max drawdown {pct(m['bench_max_drawdown'])}"
+    )
     normalized_chart({"Portofoliu": res.nav, "BET-TR": res.benchmark}, "Backtest (baza 100)")
     st.dataframe(portfolio.yearly_returns(res).map(pct), use_container_width=True)
 
@@ -226,11 +283,26 @@ def page_portfolio():
         return
     v = r.var.copy()
     v.index = [f"{x:.0%}" for x in v.index]
-    st.dataframe(v.style.format({c: "{:.2%}" for c in v.columns if not c.endswith("_ron")} |
-                                {c: "{:,.0f}" for c in v.columns if c.endswith("_ron")}), use_container_width=True)
-    st.dataframe(r.positions.style.format({"weight": "{:.1%}", "volatility": "{:.1%}", "beta_weekly": "{:.2f}",
-                                           "risk_contribution": "{:.1%}", "pct_days_traded": "{:.0%}",
-                                           "days_to_liquidate": "{:.1f}"}), use_container_width=True)
+    st.dataframe(
+        v.style.format(
+            {c: "{:.2%}" for c in v.columns if not c.endswith("_ron")}
+            | {c: "{:,.0f}" for c in v.columns if c.endswith("_ron")}
+        ),
+        use_container_width=True,
+    )
+    st.dataframe(
+        r.positions.style.format(
+            {
+                "weight": "{:.1%}",
+                "volatility": "{:.1%}",
+                "beta_weekly": "{:.2f}",
+                "risk_contribution": "{:.1%}",
+                "pct_days_traded": "{:.0%}",
+                "days_to_liquidate": "{:.1f}",
+            }
+        ),
+        use_container_width=True,
+    )
     left, right = st.columns(2)
     with left:
         st.subheader("Corelatii (saptamanal)")
@@ -239,9 +311,11 @@ def page_portfolio():
         st.subheader("Scenarii de stres")
         st.dataframe(r.stress.style.format({"portfolio": "{:.1%}", "benchmark": "{:.1%}"}), hide_index=True)
     cc = r.concentration
-    st.caption(f"HHI {cc['hhi']:.3f} (≈{cc['effective_n']:.1f} pozitii) · stat ≥50%: {pct(cc['state_controlled'], 0)} · "
-               f"vandabil in 1/5/20 zile: {pct(cc['liquidatable_1d'], 0)} / {pct(cc['liquidatable_5d'], 0)} / "
-               f"{pct(cc['liquidatable_20d'], 0)}")
+    st.caption(
+        f"HHI {cc['hhi']:.3f} (≈{cc['effective_n']:.1f} pozitii) · stat ≥50%: {pct(cc['state_controlled'], 0)} · "
+        f"vandabil in 1/5/20 zile: {pct(cc['liquidatable_1d'], 0)} / {pct(cc['liquidatable_5d'], 0)} / "
+        f"{pct(cc['liquidatable_20d'], 0)}"
+    )
 
 
 def page_events():
@@ -250,29 +324,54 @@ def page_events():
     days = st.sidebar.slider("Zile", 7, 90, 30)
     cond = "symbol IN (SELECT symbol FROM watchlist)" if only_watch else "1=1"
     st.subheader("Urmeaza")
-    st.dataframe(con.execute(f"""
+    st.dataframe(
+        con.execute(
+            f"""
         SELECT date, symbol, kind, event FROM calendar WHERE {cond} AND date BETWEEN current_date AND current_date + ?
         UNION ALL
         SELECT ex_date, symbol, 'ex-dividend', 'Dividend ' || amount FROM dividends
         WHERE {cond} AND ex_date BETWEEN current_date AND current_date + ?
-        ORDER BY 1, 2""", [days, days]).df(), use_container_width=True, hide_index=True)
+        ORDER BY 1, 2""",
+            [days, days],
+        ).df(),
+        use_container_width=True,
+        hide_index=True,
+    )
     st.subheader("Anunturi recente")
-    st.dataframe(con.execute(f"""
+    st.dataframe(
+        con.execute(
+            f"""
         SELECT published, symbol, category, title, url_ro FROM reports
-        WHERE {cond} AND published > now() - to_days(?) ORDER BY published DESC LIMIT 300""", [days]).df(),
-        use_container_width=True, hide_index=True, column_config={"url_ro": st.column_config.LinkColumn("PDF")})
+        WHERE {cond} AND published > now() - to_days(?) ORDER BY published DESC LIMIT 300""",
+            [days],
+        ).df(),
+        use_container_width=True,
+        hide_index=True,
+        column_config={"url_ro": st.column_config.LinkColumn("PDF")},
+    )
     st.subheader("Stiri")
-    st.dataframe(con.execute(f"""
+    news_cond = "list_has_any(symbols, (SELECT list(symbol) FROM watchlist))" if only_watch else "1=1"
+    st.dataframe(
+        con.execute(
+            f"""
         SELECT published, array_to_string(symbols, ',') AS symbols, title, url FROM news
-        WHERE len(symbols) > 0 AND {'list_has_any(symbols, (SELECT list(symbol) FROM watchlist))' if only_watch else '1=1'}
-          AND published > now() - to_days(?) ORDER BY published DESC""", [days]).df(),
-        use_container_width=True, hide_index=True, column_config={"url": st.column_config.LinkColumn("Link")})
+        WHERE len(symbols) > 0 AND {news_cond}
+          AND published > now() - to_days(?) ORDER BY published DESC""",
+            [days],
+        ).df(),
+        use_container_width=True,
+        hide_index=True,
+        column_config={"url": st.column_config.LinkColumn("Link")},
+    )
 
 
-PAGES = {"Emitent": page_stock, "Screener": page_screen, "Portofoliu": page_portfolio, "Calendar si anunturi": page_events}
+PAGES = {
+    "Emitent": page_stock,
+    "Screener": page_screen,
+    "Portofoliu": page_portfolio,
+    "Calendar si anunturi": page_events,
+}
 choice = st.sidebar.radio("Pagina", list(PAGES))
 PAGES[choice]()
-from datetime import datetime as _dt
-
-st.sidebar.caption(f"Date actualizate: {_dt.fromtimestamp(VERSION):%d.%m.%Y %H:%M}")
+st.sidebar.caption(f"Date actualizate: {datetime.fromtimestamp(VERSION):%d.%m.%Y %H:%M}")
 st.sidebar.caption("Date: bvb.ro (uz personal), data.gov.ro (CC-BY 4.0). Nu reprezinta recomandari de investitii.")

@@ -24,10 +24,17 @@ def available_year(as_of: date) -> int:
 
 
 def fundamentals(con, symbol: str) -> pd.DataFrame:
-    df = con.execute("""
+    df = (
+        con.execute(
+            """
         SELECT year, kind, revenue, total_revenue, net_profit, equity, total_assets, debts, cash, employees
         FROM fundamentals_annual WHERE symbol = ? ORDER BY year
-    """, [symbol]).df().set_index("year")
+    """,
+            [symbol],
+        )
+        .df()
+        .set_index("year")
+    )
     if df.empty:
         return df
     df["net_margin"] = df["net_profit"] / df["revenue"].where(df["revenue"] > 0)
@@ -44,23 +51,29 @@ def fundamentals(con, symbol: str) -> pd.DataFrame:
 
 def dividends_per_fiscal_year(con, symbol: str) -> pd.Series:
     """Total dividende distribuite pe exercitiu (RON) = suma(dividend * actiuni la data ex)."""
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT d.fiscal_year, sum(d.amount * i.shares * coalesce(
             (SELECT arg_max(a.cap_factor, a.date) FROM prices_adj a
              WHERE a.symbol = d.symbol AND a.date < coalesce(d.ex_date, d.record_date)), 1)) AS total
         FROM dividends d JOIN instruments i USING (symbol)
         WHERE d.symbol = ? AND d.fiscal_year IS NOT NULL
         GROUP BY d.fiscal_year
-    """, [symbol]).df()
+    """,
+        [symbol],
+    ).df()
     return df.set_index("fiscal_year")["total"]
 
 
 def market_cap_series(con, symbol: str) -> pd.Series:
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT a.date, a.close * i.shares * a.cap_factor AS mcap
         FROM prices_adj a JOIN instruments i USING (symbol)
         WHERE a.symbol = ? AND i.shares IS NOT NULL ORDER BY a.date
-    """, [symbol]).df()
+    """,
+        [symbol],
+    ).df()
     return pd.Series(df["mcap"].values, index=pd.to_datetime(df["date"]), name="mcap")
 
 
@@ -74,13 +87,15 @@ def multiples_history(con, symbol: str, freq: str = "ME") -> pd.DataFrame:
     fy = pd.Series([available_year(d.date()) for d in m.index], index=m.index)
     f = fund.reindex(fy.values)
     f.index = m.index
-    return pd.DataFrame({
-        "mcap": m,
-        "fiscal_year": fy,
-        "pe": m / f["net_profit"].where(f["net_profit"] > 0),
-        "pb": m / f["equity"].where(f["equity"] > 0),
-        "ps": m / f["revenue"].where(f["revenue"] > 0),
-    }).dropna(subset=["fiscal_year"])
+    return pd.DataFrame(
+        {
+            "mcap": m,
+            "fiscal_year": fy,
+            "pe": m / f["net_profit"].where(f["net_profit"] > 0),
+            "pb": m / f["equity"].where(f["equity"] > 0),
+            "ps": m / f["revenue"].where(f["revenue"] > 0),
+        }
+    ).dropna(subset=["fiscal_year"])
 
 
 def current_multiples(con, symbols: list[str], as_of: date | None = None) -> pd.DataFrame:
@@ -107,13 +122,26 @@ def current_multiples(con, symbols: list[str], as_of: date | None = None) -> pd.
         pb = cap / f["equity"] if f["equity"] and f["equity"] > 0 else np.nan
         # pozitia multiplului actual fata de propriul istoric pe 10 ani (0 = cel mai ieftin)
         h10 = hist[hist.index > last_day - pd.DateOffset(years=10)]
-        rows.append({
-            "symbol": s, "fiscal_year": int(fy), "kind": f["kind"], "mcap_mn": cap / 1e6,
-            "pe": pe, "pb": pb,
-            "ps": cap / f["revenue"] if f["revenue"] and f["revenue"] > 0 else np.nan,
-            "roe": f["roe"], "net_margin": f["net_margin"], "debt_to_equity": f["debt_to_equity"],
-            "revenue_growth": f["revenue_growth"], "payout": f["payout"],
-            "pe_pctile_10y": (h10["pe"].dropna() < pe).mean() if pe == pe and h10["pe"].notna().sum() >= 24 else np.nan,
-            "pb_pctile_10y": (h10["pb"].dropna() < pb).mean() if pb == pb and h10["pb"].notna().sum() >= 24 else np.nan,
-        })
+        rows.append(
+            {
+                "symbol": s,
+                "fiscal_year": int(fy),
+                "kind": f["kind"],
+                "mcap_mn": cap / 1e6,
+                "pe": pe,
+                "pb": pb,
+                "ps": cap / f["revenue"] if f["revenue"] and f["revenue"] > 0 else np.nan,
+                "roe": f["roe"],
+                "net_margin": f["net_margin"],
+                "debt_to_equity": f["debt_to_equity"],
+                "revenue_growth": f["revenue_growth"],
+                "payout": f["payout"],
+                "pe_pctile_10y": (h10["pe"].dropna() < pe).mean()
+                if pe == pe and h10["pe"].notna().sum() >= 24
+                else np.nan,
+                "pb_pctile_10y": (h10["pb"].dropna() < pb).mean()
+                if pb == pb and h10["pb"].notna().sum() >= 24
+                else np.nan,
+            }
+        )
     return pd.DataFrame(rows).set_index("symbol") if rows else pd.DataFrame()

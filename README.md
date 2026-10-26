@@ -113,8 +113,11 @@ uv run bvb backtest "TLV,AZO" --start 2008-01-01
 - ~5.900 de acțiuni delistate în lista BVB (majoritatea foste RASDAQ); se păstrează doar cele cu istoric pe BVB, cu `market = 'DELISTED'`. Verificarea e reluabilă (`delisted_probe`).
 - În backtest, o acțiune delistată se vinde la ultimul preț după ultima zi cu tranzacții, iar ponderea ei se redistribuie la rebalansare. Prețul de ieșire real (ofertă de preluare, faliment) poate diferi.
 
-## Teste
+## Dezvoltare
+
+Reguli pentru dezvoltare (inclusiv pentru agenți): [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md), [arhitectura](docs/architecture.md) și [docs/engineering](docs/engineering/coding-standards.md).
 
 ```bash
-uv run pytest
+python3 scripts/install_hooks.py   # o data per clona: blocheaza commit/push direct pe main
+python3 scripts/verify.py          # verificari repo + ruff + pytest (ca in CI)
 ```

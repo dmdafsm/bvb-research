@@ -22,11 +22,16 @@ def con(tmp_path):
         rows.append([d.date(), "BBB", 20.0 if i < 40 else 19.0, 20.0 if i < 40 else 19.0])
     c.executemany(
         "INSERT INTO prices_eod (date, symbol, source, close, volume, adj_close) VALUES (?, ?, 'bvb_hist', ?, 1000, ?)",
-        [[r[0], r[1], r[2], r[3]] for r in rows])
-    c.executemany("INSERT INTO instruments (symbol, market) VALUES (?, ?)",
-                  [["BET", "INDEX"], ["BET-TR", "INDEX"], ["AAA", "REGS"], ["BBB", "REGS"]])
-    c.execute("INSERT INTO capital_changes (symbol, record_date, shares_before, shares_after) VALUES (?, ?, 100, 200)",
-              ["AAA", days[31].date()])
+        [[r[0], r[1], r[2], r[3]] for r in rows],
+    )
+    c.executemany(
+        "INSERT INTO instruments (symbol, market) VALUES (?, ?)",
+        [["BET", "INDEX"], ["BET-TR", "INDEX"], ["AAA", "REGS"], ["BBB", "REGS"]],
+    )
+    c.execute(
+        "INSERT INTO capital_changes (symbol, record_date, shares_before, shares_after) VALUES (?, ?, 100, 200)",
+        ["AAA", days[31].date()],
+    )
     # BBB: dividend 1 leu, data ex = ziua 40 (pretul scade cu dividendul)
     c.execute("INSERT INTO dividends (symbol, amount, ex_date) VALUES ('BBB', 1.0, ?)", [days[40].date()])
     adjust.run(c, ["AAA", "BBB"])
@@ -51,9 +56,11 @@ def test_dividend_tax_and_cash_mode(con):
 
 
 def test_rebalance_and_fees(con):
-    r = portfolio.backtest(con, portfolio.Config(weights={"AAA": 0.5, "BBB": 0.5}, rebalance="monthly", fee=0.01, tax=0))
+    r = portfolio.backtest(
+        con, portfolio.Config(weights={"AAA": 0.5, "BBB": 0.5}, rebalance="monthly", fee=0.01, tax=0)
+    )
     assert r.metrics["fees_paid"] > 0
-    assert (r.trades["date"] > r.nav.index[0].date()).any()   # au existat rebalansari
+    assert (r.trades["date"] > r.nav.index[0].date()).any()  # au existat rebalansari
     assert r.nav.iloc[0] == pytest.approx(100_000, rel=0.011)  # doar comisionul initial
 
 

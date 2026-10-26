@@ -21,16 +21,40 @@ FEEDS = {
 
 # Nume uzuale in presa, pe langa denumirea oficiala.
 ALIASES = {
-    "SNP": ["petrom", "omv petrom"], "TLV": ["banca transilvania"], "H2O": ["hidroelectrica"],
-    "SNG": ["romgaz"], "TGN": ["transgaz"], "TEL": ["transelectrica"], "SNN": ["nuclearelectrica"],
-    "EL": ["electrica"], "BRD": ["brd groupe", "brd-groupe", "brd "], "FP": ["fondul proprietatea"],
-    "DIGI": ["digi communications", "rcs&rds", "rcs & rds"], "M": ["medlife"], "ONE": ["one united"],
-    "AQ": ["aquila part"], "TTS": ["transport trade services", "tts "], "WINE": ["purcari"],
-    "SFG": ["sphera franchise"], "TRP": ["teraplast"], "COTE": ["conpet"], "BVB": ["bursa de valori bucuresti"],
-    "ATB": ["antibiotice"], "ALR": ["alro"], "EBS": ["erste group"], "AROBS": ["arobs"],
-    "BNET": ["bittnet"], "CFH": ["cris-tim", "cristim"], "PE": ["premier energy"], "OIL": ["oil terminal"],
-    "LION": ["lion capital"], "EVER": ["evergent"], "TRANSI": ["transilvania investments"],
-    "INFINITY": ["infinity capital"], "LONG": ["longshield"], "SAFE": ["safetech"],
+    "SNP": ["petrom", "omv petrom"],
+    "TLV": ["banca transilvania"],
+    "H2O": ["hidroelectrica"],
+    "SNG": ["romgaz"],
+    "TGN": ["transgaz"],
+    "TEL": ["transelectrica"],
+    "SNN": ["nuclearelectrica"],
+    "EL": ["electrica"],
+    "BRD": ["brd groupe", "brd-groupe", "brd "],
+    "FP": ["fondul proprietatea"],
+    "DIGI": ["digi communications", "rcs&rds", "rcs & rds"],
+    "M": ["medlife"],
+    "ONE": ["one united"],
+    "AQ": ["aquila part"],
+    "TTS": ["transport trade services", "tts "],
+    "WINE": ["purcari"],
+    "SFG": ["sphera franchise"],
+    "TRP": ["teraplast"],
+    "COTE": ["conpet"],
+    "BVB": ["bursa de valori bucuresti"],
+    "ATB": ["antibiotice"],
+    "ALR": ["alro"],
+    "EBS": ["erste group"],
+    "AROBS": ["arobs"],
+    "BNET": ["bittnet"],
+    "CFH": ["cris-tim", "cristim"],
+    "PE": ["premier energy"],
+    "OIL": ["oil terminal"],
+    "LION": ["lion capital"],
+    "EVER": ["evergent"],
+    "TRANSI": ["transilvania investments"],
+    "INFINITY": ["infinity capital"],
+    "LONG": ["longshield"],
+    "SAFE": ["safetech"],
 }
 LEGAL_FORMS = r"\b(s\.?a\.?|sa|s\.?r\.?l\.?|n\.?v\.?|ag|plc|se|societatea|compania|nationala)\b"
 
@@ -69,14 +93,24 @@ def parse_feed(source: str, xml: bytes) -> list[dict]:
     root = ElementTree.fromstring(xml)
     items = []
     for it in root.iter("item"):
-        get = lambda tag: (it.findtext(tag) or "").strip()
+
+        def get(tag, item=it):
+            return (item.findtext(tag) or "").strip()
+
         try:
             published = parsedate_to_datetime(get("pubDate")).replace(tzinfo=None) if get("pubDate") else None
         except (TypeError, ValueError):
             published = None
         summary = re.sub(r"<[^>]+>", " ", get("description"))
-        items.append({"source": source, "url": get("link"), "title": get("title"),
-                      "summary": " ".join(summary.split())[:1000], "published": published or datetime.now()})
+        items.append(
+            {
+                "source": source,
+                "url": get("link"),
+                "title": get("title"),
+                "summary": " ".join(summary.split())[:1000],
+                "published": published or datetime.now(),
+            }
+        )
     return items
 
 
@@ -99,6 +133,7 @@ def store(con, items: list[dict], match) -> int:
         con.execute(
             """INSERT INTO news (url, source, published, title, summary, symbols) VALUES (?, ?, ?, ?, ?, ?)
                ON CONFLICT (url) DO UPDATE SET symbols = excluded.symbols""",
-            [it["url"], it["source"], it["published"], it["title"], it["summary"], symbols])
+            [it["url"], it["source"], it["published"], it["title"], it["summary"], symbols],
+        )
         n += 1
     return n
