@@ -196,6 +196,11 @@ def save_raw(name: str, html: str) -> None:
 
 
 def store_reports(con, rows: list[dict]) -> int:
+    """Upsert pe (simbol, minut, titlu).
+
+    Pagina globala da ora la minut, tab-ul Stiri al emitentului si secundele;
+    taiem la minut ca acelasi raport din ambele surse sa fie un singur rand.
+    """
     n = 0
     for r in rows:
         if not r["published"] or not r["title"]:
@@ -204,12 +209,13 @@ def store_reports(con, rows: list[dict]) -> int:
             """INSERT INTO reports (symbol, published, title, category, bvb_type, url_ro, url_en)
                VALUES (?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT (symbol, published, title) DO UPDATE SET
+                   category = excluded.category,
                    bvb_type = coalesce(excluded.bvb_type, reports.bvb_type),
                    url_ro = coalesce(excluded.url_ro, reports.url_ro),
                    url_en = coalesce(excluded.url_en, reports.url_en)""",
             [
                 r["symbol"],
-                r["published"],
+                r["published"].replace(second=0, microsecond=0),
                 r["title"],
                 classify(r["title"]),
                 r["bvb_type"],
@@ -219,6 +225,33 @@ def store_reports(con, rows: list[dict]) -> int:
         )
         n += 1
     return n
+
+
+def normalize(con) -> int:
+    """Uneste randurile aceluiasi raport salvat cu si fara secunde si reclasifica titlurile
+    (categoriile se schimba cand se modifica CATEGORIES). Idempotent. -> randuri eliminate."""
+    before = con.execute("SELECT count(*) FROM reports").fetchone()[0]
+    con.execute("BEGIN")
+    try:
+        con.execute("""
+            CREATE OR REPLACE TEMP TABLE reports_merged AS
+            SELECT symbol, date_trunc('minute', published) AS published, title,
+                   max(bvb_type) AS bvb_type, max(url_ro) AS url_ro, max(url_en) AS url_en, max(text) AS text
+            FROM reports GROUP BY ALL
+        """)
+        con.execute("DELETE FROM reports")
+        con.execute("""
+            INSERT INTO reports (symbol, published, title, bvb_type, url_ro, url_en, text)
+            SELECT symbol, published, title, bvb_type, url_ro, url_en, text FROM reports_merged
+        """)
+        con.execute("DROP TABLE reports_merged")
+        titles = [t for (t,) in con.execute("SELECT DISTINCT title FROM reports").fetchall()]
+        con.executemany("UPDATE reports SET category = ? WHERE title = ?", [[classify(t), t] for t in titles])
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+    return before - con.execute("SELECT count(*) FROM reports").fetchone()[0]
 
 
 def store_calendar(con, symbol: str, events: list[dict]) -> None:
