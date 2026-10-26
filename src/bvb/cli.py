@@ -1,7 +1,7 @@
 import typer
 
-from bvb import db
-from bvb.ingest import bvb_history, bvb_summary, yahoo
+from bvb import adjust, db
+from bvb.ingest import bvb_history, bvb_summary, issuer, yahoo
 from bvb.reconcile import reconcile as reconcile_prices
 
 app = typer.Typer(help="Instrument de analiza BVB (uz personal).", no_args_is_help=True)
@@ -85,6 +85,66 @@ def ingest_history(
     found = sum(1 for n in counts.values() if n)
     db.log_ingest(con, "bvb_history", {"symbols": len(symbols)}, "ok", sum(counts.values()), f"{found} cu date")
     typer.echo(f"Total: {found}/{len(symbols)} simboluri, {sum(counts.values())} randuri")
+
+
+@ingest_app.command("indices")
+def ingest_indices(
+    indices: list[str] = typer.Argument(None, help="Indici; implicit lista din bvb_history.INDICES."),
+):
+    """Istoric indici BVB (BET, BET-TR etc.) din graficul BVB."""
+    con = db.connect()
+    indices = indices or bvb_history.INDICES
+    con.executemany(
+        "INSERT INTO instruments (symbol, market) VALUES (?, 'INDEX') ON CONFLICT (symbol) DO UPDATE SET market = 'INDEX'",
+        [[i] for i in indices],
+    )
+    counts = bvb_history.ingest(con, indices, log=typer.echo)
+    db.log_ingest(con, "bvb_indices", {"indices": indices}, "ok", sum(counts.values()))
+
+
+@ingest_app.command("issuers")
+def ingest_issuers(
+    symbols: list[str] = typer.Argument(None, help="Simboluri; implicit actiunile neactualizate de --max-age zile."),
+    max_age: int = typer.Option(7, help="Re-descarca fisele mai vechi de atatea zile."),
+):
+    """Fisa emitentului: date de baza, dividende, modificari de capital."""
+    con = db.connect()
+    if not symbols:
+        symbols = [r[0] for r in con.execute(
+            "SELECT symbol FROM instruments WHERE market <> 'INDEX' "
+            "AND (issuer_updated IS NULL OR issuer_updated < now() - to_days(?)) ORDER BY symbol",
+            [max_age]).fetchall()]
+    ok = 0
+    for symbol, html, err in issuer.fetch_snapshots(symbols):
+        if err is not None:
+            typer.echo(f"{symbol}: eroare {err!r}"[:200])
+            continue
+        issuer.save_raw(symbol, html)
+        data = issuer.parse(symbol, html)
+        issuer.store(con, data)
+        ok += 1
+        typer.echo(f"{symbol}: {len(data['dividends'])} dividende, {len(data['capital'])} modificari capital")
+    db.log_ingest(con, "issuers", {"symbols": len(symbols)}, "ok", ok)
+    typer.echo(f"Total: {ok}/{len(symbols)} fise")
+
+
+@app.command("adjust")
+def adjust_cmd(
+    symbols: list[str] = typer.Argument(None, help="Simboluri; implicit toate actiunile."),
+    show: int = typer.Option(25, help="Cate randuri din rezumat afiseaza (cele mai problematice primele)."),
+):
+    """Calculeaza preturile ajustate (capital + dividende) in `prices_adj`."""
+    con = db.connect()
+    if not symbols:
+        symbols = [r[0] for r in con.execute(
+            "SELECT symbol FROM instruments WHERE market <> 'INDEX' ORDER BY symbol").fetchall()]
+    summary = adjust.run(con, symbols)
+    db.log_ingest(con, "adjust", {"symbols": len(symbols)}, "ok", int(summary["days"].sum()) if len(summary) else 0)
+    if len(summary):
+        summary = summary.sort_values(["suspicious", "unknown", "max_div_yield"], ascending=False)
+        typer.echo(summary.head(show).to_string(index=False))
+        typer.echo(f"\n{len(summary)} simboluri; evenimente necunoscute: {summary['unknown'].sum()}, "
+                   f"miscari suspecte: {summary['suspicious'].sum()}, dividende sarite: {summary['div_skipped'].sum()}")
 
 
 @app.command()

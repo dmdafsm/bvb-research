@@ -26,6 +26,19 @@ uv run bvb status
 - HTML-ul brut al fiecărei ședințe BVB se păstrează în `data/raw/bvb_summary/`.
 - Datele sunt doar pentru uz personal (termenii BVB).
 
+## Emitenți, indici, prețuri ajustate
+
+```bash
+uv run bvb ingest indices        # BET, BET-TR, BET-FI, BET-NG, ROTX etc.
+uv run bvb ingest issuers        # fisa emitentului: ISIN, CUI, nr. actiuni, dividende, modificari capital
+uv run bvb adjust                # recalculeaza prices_adj (adj_close, tr_close) + raport de verificare
+```
+
+- `prices_adj.adj_close`: ajustat pentru evenimente de capital (acțiuni gratuite, splituri, consolidări). Factorii vin din seria ajustată BVB; modificările de capital pe care BVB nu le-a ajustat se derivă din numărul de acțiuni, doar dacă saltul de preț le confirmă.
+- `prices_adj.tr_close`: randament total cu dividende brute reinvestite (factor `P_ex / (P_ex + D)`).
+- `adjust_events`: evenimentele aplicate (`capital`, `capital_derived`, `unknown`) și salturile BVB tratate ca dividend.
+- Raportul „mișcări suspecte” = salturi > 40% care persistă 5 zile în randamentul total; majoritatea sunt acțiuni nelichide din anii '90–2000.
+
 ## Teste
 
 ```bash

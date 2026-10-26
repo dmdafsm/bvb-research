@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS instruments (
     symbol      VARCHAR PRIMARY KEY,
     name        VARCHAR,
     isin        VARCHAR,
-    market      VARCHAR,          -- REGS = piata reglementata, XRS1 = AeRO etc.
+    market      VARCHAR,          -- REGS = piata reglementata, XRS1 = AeRO, INDEX = indice
     yahoo       VARCHAR,          -- ticker Yahoo, NULL daca nu exista
     first_seen  DATE,
     last_seen   DATE
@@ -43,6 +43,43 @@ CREATE TABLE IF NOT EXISTS corporate_events (
     amount      DOUBLE,           -- dividend pe actiune
     ratio       DOUBLE,           -- split: numerator / denominator
     PRIMARY KEY (date, symbol, source, kind)
+);
+
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS isin VARCHAR;
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS segment VARCHAR;
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS category VARCHAR;
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS status VARCHAR;
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS cui VARCHAR;
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS activity VARCHAR;
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS website VARCHAR;
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS shares BIGINT;
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS nominal_value DOUBLE;
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS listing_date DATE;
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS issuer_updated TIMESTAMP;
+
+-- Din fisa emitentului (istoric complet, inlocuit la fiecare actualizare).
+CREATE TABLE IF NOT EXISTS dividends (
+    symbol        VARCHAR NOT NULL,
+    fiscal_year   INTEGER,
+    amount        DOUBLE,           -- RON brut pe actiune
+    agm_date      DATE,
+    record_date   DATE,
+    ex_date       DATE,
+    declared_date DATE,
+    pay_date      DATE
+);
+
+CREATE TABLE IF NOT EXISTS capital_changes (
+    symbol         VARCHAR NOT NULL,
+    change_date    DATE,
+    agm_date       DATE,
+    ref_date       DATE,
+    record_date    DATE,
+    operation      VARCHAR,
+    shares_before  BIGINT,
+    shares_after   BIGINT,
+    nominal_before DOUBLE,
+    nominal_after  DOUBLE
 );
 
 CREATE SEQUENCE IF NOT EXISTS ingest_log_seq;

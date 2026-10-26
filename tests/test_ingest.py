@@ -107,3 +107,23 @@ def test_last_complete_day():
 
     assert last_complete_day(datetime(2026, 10, 26, 14, 0, tzinfo=TZ)) == date(2026, 10, 25)
     assert last_complete_day(datetime(2026, 10, 26, 18, 30, tzinfo=TZ)) == date(2026, 10, 26)
+
+
+def test_issuer_parse_fixture():
+    from bvb.ingest import issuer
+
+    data = issuer.parse("SNP", (FIXTURES / "issuer_SNP.html").read_text())
+    inst = data["instrument"]
+    assert inst["name"] == "OMV PETROM S.A."
+    assert inst["isin"] == "RO0000AAA001"
+    assert inst["cui"] == "12345678"
+    assert inst["shares"] == 1250000000
+    assert inst["listing_date"] == date(2001, 9, 3)
+
+    assert len(data["dividends"]) == 25
+    d = data["dividends"][0]
+    assert (d["fiscal_year"], d["amount"], d["ex_date"]) == (2025, 0.0578, date(2026, 5, 14))
+
+    assert len(data["capital"]) == 6
+    c = data["capital"][0]
+    assert (c["record_date"], c["shares_before"], c["shares_after"]) == (date(2022, 7, 6), 1000000000, 1250000000)

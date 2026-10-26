@@ -15,12 +15,12 @@ Surse și fezabilitate: [surse-date.md](surse-date.md).
 
 Reguli de colectare: doar pagini publice, o rulare pe zi, pauze între cereri, cache local (nu se re-descarcă ce există deja), date doar pentru uz personal.
 
-## Faza 0 — Fundație
+## Faza 0 — Fundație ✅
 - Structura proiectului: `bvb/ingest`, `bvb/models`, `bvb/analytics`, `bvb/portfolio`, `app/`, `tests/`.
 - Schema DuckDB: `instruments`, `prices_eod`, `corporate_actions`, `dividends`, `reports`, `calendar`, `fx_rates`, `fundamentals`, `ingest_log`.
 - Config (cale DB, listă simboluri urmărite), logging, CLI (`bvb ingest prices --date …`).
 
-## Faza 1 — Prețuri EOD (prioritar)
+## Faza 1 — Prețuri EOD ✅ (istoric din graficul BVB; sumarul BVB doar 30 de zile)
 1. Scraper „Sumare tranzacționare”: pentru o dată → toate simbolurile (OHLC, mediu, închidere, preț ref., volum, valoare, nr. tranz.).
 2. Verificare: cât de departe merge istoricul în trecut pe această pagină.
 3. Backfill: zi cu zi pe BVB cât permite; pentru perioade mai vechi, Yahoo (`.RO`) ca sursă secundară, marcată în coloana `source`.
@@ -28,7 +28,7 @@ Reguli de colectare: doar pagini publice, o rulare pe zi, pauze între cereri, c
 5. Indici (BET, BET-TR, BET-FI, BET-NG, BETPlus): valori zilnice pentru benchmark.
 6. Job zilnic incremental + `ingest_log` (ce s-a descărcat, erori).
 
-## Faza 2 — Metadate și acțiuni corporative
+## Faza 2 — Metadate și acțiuni corporative ✅ (2026-10-26)
 - Instrumente: simbol, ISIN, emitent, sector/industrie, piață (REGS/AeRO), număr acțiuni.
 - Dividende (InfoDividend): ex-date, sumă, plată.
 - Modificări capital social: splituri, consolidări, majorări cu drept de preferință.
@@ -80,6 +80,12 @@ Reguli de colectare: doar pagini publice, o rulare pe zi, pauze între cereri, c
 | 3 | Anunțuri noi pentru simbolurile urmărite în ≤ 1 zi |
 | 4 | Fundamentale anuale ESEF pentru componenții BET |
 | 6, 8 | Dashboard complet |
+
+## Limitări cunoscute (după Faza 2)
+- Lipsesc companiile delistate (istoric doar pentru simbolurile tranzacționate în ultimele 30 de zile) → bias de supraviețuire în backtest.
+- 60 de salturi în factorul BVB fără modificare de capital asociată (`unknown`) sunt păstrate ca evenimente de capital.
+- 125 de dividende fără dată ex/înregistrare utilizabilă sunt sărite.
+- Dividendele sunt brute (fără impozit).
 
 ## Riscuri cunoscute
 - Structura paginilor BVB se poate schimba → teste pe HTML salvat, alertă la eșecul scraper-ului.
