@@ -45,11 +45,31 @@ def connection(version: float):
 con = connection(VERSION)
 
 
+TIERS = {  # (segment, categorie) din fisa emitentului -> piata afisata
+    ("Principal", "Premium"): "Principal Premium",
+    ("Principal", "Standard"): "Principal Standard",
+    ("Principal", "Int'l"): "Internațional",
+    ("SMT", "AeRO Premium"): "AeRO Premium",
+    ("SMT", "AeRO Standard"): "AeRO Standard",
+    ("SMT", "AeRO Baza"): "AeRO Standard",
+    ("SMT", "Intl-SMT"): "Internațional",
+}
+
+
 @st.cache_data(max_entries=1)
 def instruments(version: float) -> pd.DataFrame:
-    return con.execute("""
-        SELECT symbol, name, market, sector, isin FROM instruments
-        WHERE market <> 'INDEX' ORDER BY symbol""").df()
+    df = con.execute("""
+        SELECT i.symbol, i.name, i.market, i.segment, i.category, i.sector, i.isin,
+               i.market = 'DELISTED' AS delisted, p.last_trade
+        FROM instruments i
+        LEFT JOIN (SELECT symbol, max(date) AS last_trade FROM prices_eod GROUP BY 1) p USING (symbol)
+        WHERE i.market <> 'INDEX' ORDER BY i.symbol""").df()
+    df["tier"] = [
+        "Delistate" if d else TIERS.get((s, c), "Altele")
+        for d, s, c in zip(df["delisted"], df["segment"], df["category"], strict=True)
+    ]
+    df["sector"] = df["sector"].fillna("Nespecificat").str.capitalize()
+    return df
 
 
 @st.cache_data(max_entries=1)
@@ -81,13 +101,48 @@ def normalized_chart(series: dict[str, pd.Series], title: str, log: bool = False
 # --- pagini ----------------------------------------------------------------------
 
 
-def page_stock():
+def pick_issuer() -> str | None:
+    """Filtre in bara laterala, apoi alegerea emitentului din lista ramasa."""
     inst = instruments(VERSION)
-    labels = {r.symbol: f"{r.symbol} — {r.name}" for r in inst.itertuples()}
-    default = watchlist(VERSION)[0] if watchlist(VERSION) else "TLV"
-    symbol = st.sidebar.selectbox(
-        "Emitent", list(labels), index=list(labels).index(default) if default in labels else 0, format_func=labels.get
-    )
+    watch = watchlist(VERSION)
+    status = st.sidebar.segmented_control("Emitenti", ["Listati", "Delistati", "Toti"], default="Listati") or "Listati"
+    if status == "Listati":
+        inst = inst[~inst["delisted"]]
+    elif status == "Delistati":
+        inst = inst[inst["delisted"]].sort_values("last_trade", ascending=False)
+    if watch and st.sidebar.toggle("Doar lista de urmarire"):
+        inst = inst[inst["symbol"].isin(watch)]
+    if status == "Listati":
+        tiers = [t for t in dict.fromkeys(TIERS.values()) if t in set(inst["tier"])]
+        chosen = st.sidebar.multiselect("Piata", tiers, placeholder="Toate pietele")
+        if chosen:
+            inst = inst[inst["tier"].isin(chosen)]
+        sectors = sorted(inst["sector"].unique())
+        chosen = st.sidebar.multiselect("Sector", sectors, placeholder="Toate sectoarele")
+        if chosen:
+            inst = inst[inst["sector"].isin(chosen)]
+    elif status == "Delistati" and len(inst):
+        first, last = int(inst["last_trade"].min().year), int(inst["last_trade"].max().year)
+        since = st.sidebar.slider("Ultima tranzactie din", first, last, max(first, last - 10))
+        inst = inst[inst["last_trade"].dt.year >= since]
+
+    if inst.empty:
+        st.sidebar.warning("Niciun emitent pentru filtrele alese.")
+        return None
+    labels = {
+        r.symbol: f"{r.symbol} — {r.name}" + (f" (delistat {r.last_trade:%Y})" if r.delisted else "")
+        for r in inst.itertuples()
+    }
+    options = list(labels)
+    default = next((s for s in [*watch, "TLV"] if s in labels), options[0])
+    st.sidebar.caption(f"{len(options)} emitenti")
+    return st.sidebar.selectbox("Emitent", options, index=options.index(default), format_func=labels.get)
+
+
+def page_stock():
+    symbol = pick_issuer()
+    if symbol is None:
+        return
     years = st.sidebar.select_slider("Perioada grafic (ani)", options=[1, 3, 5, 10, 20, 30], value=5)
 
     try:
@@ -97,7 +152,8 @@ def page_stock():
         return
     i = rep["info"]
     st.title(f"{symbol} — {i['name']}")
-    st.caption(f"{i['isin']} · {i['market']} · {i['segment']} {i['category']} · {i['activity']}")
+    tier = " ".join(x for x in (i["segment"], i["category"]) if x)
+    st.caption(" · ".join(x for x in (i["isin"], i["market"], tier, i["activity"]) if x))
     c = st.columns(5)
     c[0].metric("Ultimul pret", f"{i['last_close']}", help=str(i["last_date"]))
     c[1].metric("Capitalizare", f"{i['market_cap'] / 1e6:,.0f} mil." if i["market_cap"] else "–")
