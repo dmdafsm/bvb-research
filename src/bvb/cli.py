@@ -725,6 +725,7 @@ def dashboard(port: int = typer.Option(8501)):
 
     path = Path(__file__).with_name("dashboard.py")
     subprocess.run([sys.executable, "-m", "streamlit", "run", str(path), "--server.port", str(port),
+                    "--server.address", "127.0.0.1",  # doar local: datele BVB sunt pentru uz personal
                     "--server.headless", "true", "--browser.gatherUsageStats", "false"], check=False)
 
 
