@@ -70,7 +70,7 @@ def parse_summary(html: str) -> list[dict]:
         if len(cells) < len(fields):
             continue  # rand "nu exista date"
         row = {}
-        for field, td in zip(fields, cells):
+        for field, td in zip(fields, cells, strict=False):  # randurile pot avea celule in plus
             if field is None:
                 continue
             text = td.text(strip=True)
@@ -92,7 +92,8 @@ def fetch_sessions(
     o sare si continua (pentru umplerea golurilor). Se opreste si dupa
     `max_sessions` pasi sau cand pagina nu mai permite mersul inapoi.
     """
-    from playwright.sync_api import TimeoutError as PwTimeout, sync_playwright
+    from playwright.sync_api import TimeoutError as PwTimeout
+    from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -142,8 +143,21 @@ def store(con, day: date, rows: list[dict]) -> int:
         VALUES (?, ?, 'bvb', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
-            [day, r["symbol"], r["market"], r["open"], r["high"], r["low"], r["close"],
-             r["avg_price"], r["ref_price"], r["change_pct"], r["volume"], r["value"], r["trades"]]
+            [
+                day,
+                r["symbol"],
+                r["market"],
+                r["open"],
+                r["high"],
+                r["low"],
+                r["close"],
+                r["avg_price"],
+                r["ref_price"],
+                r["change_pct"],
+                r["volume"],
+                r["value"],
+                r["trades"],
+            ]
             for r in rows
         ],
     )

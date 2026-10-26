@@ -11,7 +11,6 @@ emitentilor listati.
 """
 
 import csv
-import io
 import re
 import time
 import unicodedata
@@ -20,15 +19,39 @@ import httpx
 
 API = "https://data.gov.ro/api/3/action"
 # Tip -> fragment din numele fisierului, comparat fara '_' / ' ' (anii vechi: webblbsslan2010.txt).
-KINDS = [("IR", "WEBIR"), ("BL", "BLBSSL"), ("BANK", "INST"), ("SIF", "SIF"),
-         ("ASIG", "ASIG"), ("VS", "WEBVS"), ("UU", "WEBUU")]
+KINDS = [
+    ("IR", "WEBIR"),
+    ("BL", "BLBSSL"),
+    ("BANK", "INST"),
+    ("SIF", "SIF"),
+    ("ASIG", "ASIG"),
+    ("VS", "WEBVS"),
+    ("UU", "WEBUU"),
+]
 
 # Coloanele bilantului standard (BL / IR / UU), cand lipseste descriptorul (ani vechi).
 STANDARD_LABELS = [
-    "CUI", "CAEN", "ACTIVE IMOBILIZATE - TOTAL", "ACTIVE CIRCULANTE - TOTAL", "Stocuri", "Creante",
-    "Casa si conturi la banci", "CHELTUIELI IN AVANS", "DATORII", "VENITURI IN AVANS", "PROVIZIOANE",
-    "CAPITALURI - TOTAL", "Capital subscris varsat", "Patrimoniul regiei", "Cifra de afaceri neta",
-    "VENITURI TOTALE", "CHELTUIELI TOTALE", "Profit brut", "Pierdere bruta", "Profit net", "Pierdere neta",
+    "CUI",
+    "CAEN",
+    "ACTIVE IMOBILIZATE - TOTAL",
+    "ACTIVE CIRCULANTE - TOTAL",
+    "Stocuri",
+    "Creante",
+    "Casa si conturi la banci",
+    "CHELTUIELI IN AVANS",
+    "DATORII",
+    "VENITURI IN AVANS",
+    "PROVIZIOANE",
+    "CAPITALURI - TOTAL",
+    "Capital subscris varsat",
+    "Patrimoniul regiei",
+    "Cifra de afaceri neta",
+    "VENITURI TOTALE",
+    "CHELTUIELI TOTALE",
+    "Profit brut",
+    "Pierdere bruta",
+    "Profit net",
+    "Pierdere neta",
     "Numar mediu de salariati",
 ]
 
@@ -97,6 +120,7 @@ def to_float(v: str) -> float | None:
 
 # --- campuri standard ----------------------------------------------------------
 
+
 def _first(values: dict[str, float], *patterns: str) -> float | None:
     for p in patterns:
         rx = re.compile(p)
@@ -139,11 +163,17 @@ def standardize(kind: str, values: dict[str, float]) -> dict:
             c, d = _first(v, r"\(ct\.121\) \(sold creditor\)"), _first(v, r"\(ct\.121\) \(sold debitor\)")
             out["net_profit"] = (c or 0) - (d or 0) if c is not None or d is not None else None
         out["total_revenue"] = _first(v, r"^venituri( -)? totale")
-        assets = [_first(v, r"^active imobilizate - total"), _first(v, r"^active circulante - total"),
-                  _first(v, r"^cheltuieli in avans")]
+        assets = [
+            _first(v, r"^active imobilizate - total"),
+            _first(v, r"^active circulante - total"),
+            _first(v, r"^cheltuieli in avans"),
+        ]
         out["total_assets"] = sum(a for a in assets if a is not None) if any(a is not None for a in assets) else None
-        out["debts"] = _first(v, r"^datorii$") if _first(v, r"^datorii$") is not None else _sum(
-            v, r"^datorii ce trebuie(sc)? platite")
+        out["debts"] = (
+            _first(v, r"^datorii$")
+            if _first(v, r"^datorii$") is not None
+            else _sum(v, r"^datorii ce trebuie(sc)? platite")
+        )
         out["equity"] = _first(v, r"^capitaluri proprii", r"^capitaluri - total", r"^capital - total")
     return out
 
@@ -163,9 +193,17 @@ def ingest_year(client: httpx.Client, year: int, pkg: dict, cuis: set[str], kind
         if not labels or len(labels) != len(header):
             labels = STANDARD_LABELS if kind in ("BL", "IR", "UU") and len(header) == 22 else header
         for row in found:
-            values = {norm(label): to_float(x) for label, x in zip(labels[2:], row[2:])}
-            rows.append({"cui": row[0].strip(), "year": year, "kind": kind, "caen": row[1].strip(),
-                         "values": values, **standardize(kind, values)})
+            values = {norm(label): to_float(x) for label, x in zip(labels[2:], row[2:], strict=False)}
+            rows.append(
+                {
+                    "cui": row[0].strip(),
+                    "year": year,
+                    "kind": kind,
+                    "caen": row[1].strip(),
+                    "values": values,
+                    **standardize(kind, values),
+                }
+            )
         log(f"{year} {kind}: {len(found)} emitenti")
         time.sleep(0.5)
     return rows

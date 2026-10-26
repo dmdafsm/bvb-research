@@ -19,14 +19,14 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-JUMP_TOL = 0.005          # variatie relativa minima a lui adj/close considerata eveniment
-ADJ_TICK = 1e-4           # BVB rotunjeste preturile ajustate la 4 zecimale
+JUMP_TOL = 0.005  # variatie relativa minima a lui adj/close considerata eveniment
+ADJ_TICK = 1e-4  # BVB rotunjeste preturile ajustate la 4 zecimale
 CAPITAL_WINDOW_DAYS = 10  # data inregistrare capital la max. atatea zile de salt
 DERIVED_MIN_RATIO = 0.05  # modificari de capital mai mici sunt ignorate la derivare
 DERIVED_CONFIRM_TOL = 0.25  # saltul de pret trebuie sa fie in +/-25% din raportul actiunilor
 DERIVED_CONFIRM_TOL_SUSPENDED = 0.5
-SUSPENSION_DAYS = 20        # pauza de tranzactionare considerata suspendare
-SUSPICIOUS_MOVE = 0.4       # variatie zilnica (si persistenta) raportata ca suspecta
+SUSPENSION_DAYS = 20  # pauza de tranzactionare considerata suspendare
+SUSPICIOUS_MOVE = 0.4  # variatie zilnica (si persistenta) raportata ca suspecta
 SUSPICIOUS_PERSIST_DAYS = 5
 T2_SINCE = date(2014, 10, 6)  # trecerea la decontare T+2: data ex = inregistrare - 1 zi lucratoare
 
@@ -112,8 +112,11 @@ def adjust(prices: pd.DataFrame, dividends: pd.DataFrame, capital: pd.DataFrame)
     div_factor = pd.Series(1.0, index=days)
     skipped, used = 0, []
     for d in dividends.itertuples():
-        ex = d.ex_date if pd.notna(d.ex_date) else (
-            estimate_ex_date(d.record_date, days) if pd.notna(d.record_date) else None)
+        ex = (
+            d.ex_date
+            if pd.notna(d.ex_date)
+            else (estimate_ex_date(d.record_date, days) if pd.notna(d.record_date) else None)
+        )
         if ex is None or not d.amount or d.amount <= 0:
             skipped += 1
             continue
@@ -128,8 +131,9 @@ def adjust(prices: pd.DataFrame, dividends: pd.DataFrame, capital: pd.DataFrame)
         p_ex = on_after.iloc[0] * cap_factor[on_after.index[0]] / cap_factor[before.index[-1]]
         m = p_ex / (p_ex + d.amount)
         div_factor[days < pd.Timestamp(ex)] *= m
-        used.append({"ex_date": ex, "amount": d.amount, "prev_close": before.iloc[-1],
-                     "yield": d.amount / before.iloc[-1]})
+        used.append(
+            {"ex_date": ex, "amount": d.amount, "prev_close": before.iloc[-1], "yield": d.amount / before.iloc[-1]}
+        )
 
     out = pd.DataFrame({"close": prices["close"], "cap_factor": cap_factor, "div_factor": div_factor})
     out["adj_close"] = out["close"] * out["cap_factor"]
@@ -163,13 +167,12 @@ def load(con, symbol: str):
     prices = con.execute(PRICES_SQL, [symbol]).df()
     prices["date"] = pd.to_datetime(prices["date"])
     prices = prices.set_index("date")
-    dividends = con.execute(
-        "SELECT ex_date, record_date, amount FROM dividends WHERE symbol = ?", [symbol]).df()
+    dividends = con.execute("SELECT ex_date, record_date, amount FROM dividends WHERE symbol = ?", [symbol]).df()
     for col in ("ex_date", "record_date"):
         dividends[col] = [d.date() if pd.notna(d) else None for d in pd.to_datetime(dividends[col])]
     capital = con.execute(
-        "SELECT record_date, change_date, shares_before, shares_after FROM capital_changes WHERE symbol = ?",
-        [symbol]).df()
+        "SELECT record_date, change_date, shares_before, shares_after FROM capital_changes WHERE symbol = ?", [symbol]
+    ).df()
     for col in ("record_date", "change_date"):
         capital[col] = [d.date() if pd.notna(d) else None for d in pd.to_datetime(capital[col])]
     return prices, dividends, capital
@@ -196,16 +199,20 @@ def run(con, symbols: list[str], log=print) -> pd.DataFrame:
             con.execute("INSERT INTO adjust_events SELECT symbol, date, kind, ratio FROM _ev")
             con.unregister("_ev")
         kinds = diag["events"]["kind"].value_counts().to_dict()
-        summary.append({
-            "symbol": symbol,
-            "days": len(out),
-            "capital": kinds.get("capital", 0),
-            "derived": kinds.get("capital_derived", 0),
-            "dividend_jumps": kinds.get("dividend", 0),
-            "unknown": kinds.get("unknown", 0),
-            "dividends": len(diag["dividends_used"]),
-            "div_skipped": diag["dividends_skipped"],
-            "max_div_yield": round(float(diag["dividends_used"]["yield"].max()), 3) if len(diag["dividends_used"]) else np.nan,
-            "suspicious": len(diag["suspicious_moves"]),
-        })
+        summary.append(
+            {
+                "symbol": symbol,
+                "days": len(out),
+                "capital": kinds.get("capital", 0),
+                "derived": kinds.get("capital_derived", 0),
+                "dividend_jumps": kinds.get("dividend", 0),
+                "unknown": kinds.get("unknown", 0),
+                "dividends": len(diag["dividends_used"]),
+                "div_skipped": diag["dividends_skipped"],
+                "max_div_yield": round(float(diag["dividends_used"]["yield"].max()), 3)
+                if len(diag["dividends_used"])
+                else np.nan,
+                "suspicious": len(diag["suspicious_moves"]),
+            }
+        )
     return pd.DataFrame(summary)

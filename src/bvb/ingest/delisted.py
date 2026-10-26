@@ -47,7 +47,7 @@ def fetch_list(log=print) -> list[dict]:
             n_page = 0
             while True:
                 for r in page.evaluate(ROWS_JS):
-                    rows[r[0]] = dict(zip(FIELDS, r))
+                    rows[r[0]] = dict(zip(FIELDS, r, strict=True))
                 n_page += 1
                 if n_page % 25 == 0:
                     log(f"pagina {n_page}: {len(rows)} simboluri")
@@ -58,7 +58,9 @@ def fetch_list(log=print) -> list[dict]:
                 nxt.click()
                 page.wait_for_function(
                     "prev => (document.querySelector('#gv tbody tr')?.innerText || '') !== prev",
-                    arg=first, timeout=60_000)
+                    arg=first,
+                    timeout=60_000,
+                )
                 time.sleep(REQUEST_DELAY / 2)
         finally:
             browser.close()

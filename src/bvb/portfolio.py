@@ -39,10 +39,10 @@ class Config:
     start: date | None = None
     end: date | None = None
     capital: float = 100_000.0
-    rebalance: str = "none"          # none | monthly | quarterly | yearly
-    fee: float = 0.0025              # comision pe tranzactie (fractie din valoare)
-    tax: str | float = "auto"        # "auto" (cotele istorice), sau cota fixa
-    dividends: str = "drip"          # drip | cash
+    rebalance: str = "none"  # none | monthly | quarterly | yearly
+    fee: float = 0.0025  # comision pe tranzactie (fractie din valoare)
+    tax: str | float = "auto"  # "auto" (cotele istorice), sau cota fixa
+    dividends: str = "drip"  # drip | cash
     rf: float = 0.0
 
 
@@ -59,14 +59,17 @@ class Result:
 
 def _dividends_adjusted(con, symbols: list[str]) -> pd.DataFrame:
     """Dividende per actiune ajustata (amount * cap_factor din ziua dinaintea datei ex)."""
-    df = con.execute(f"""
+    df = con.execute(
+        f"""
         SELECT d.symbol, coalesce(d.ex_date, d.record_date) AS ex_date, d.amount,
                (SELECT arg_max(a.cap_factor, a.date) FROM prices_adj a
                 WHERE a.symbol = d.symbol AND a.date < coalesce(d.ex_date, d.record_date)) AS cap_factor
         FROM dividends d
-        WHERE d.symbol IN ({','.join('?' * len(symbols))}) AND d.amount > 0
+        WHERE d.symbol IN ({",".join("?" * len(symbols))}) AND d.amount > 0
           AND coalesce(d.ex_date, d.record_date) IS NOT NULL
-    """, symbols).df()
+    """,
+        symbols,
+    ).df()
     df["ex_date"] = pd.to_datetime(df["ex_date"])
     df["amount_adj"] = df["amount"] * df["cap_factor"].fillna(1.0)
     return df
@@ -108,11 +111,19 @@ def backtest(con, cfg: Config) -> Result:
 
     # Actiunile delistate: dupa ultima zi cu tranzactii pozitia se vinde la ultimul pret,
     # iar la rebalansari ponderea lor se redistribuie celorlalte.
-    last_trade = {s: d for s, d in con.execute(
-        f"SELECT symbol, last_seen FROM instruments WHERE market = 'DELISTED' AND symbol IN ({','.join('?' * len(symbols))})",
-        symbols).fetchall()}
-    exit_day = {s: days[days.searchsorted(pd.Timestamp(d), side="right")]
-                for s, d in last_trade.items() if pd.Timestamp(d) < days[-1]}
+    last_trade = {
+        s: d
+        for s, d in con.execute(
+            "SELECT symbol, last_seen FROM instruments WHERE market = 'DELISTED' "
+            f"AND symbol IN ({','.join('?' * len(symbols))})",
+            symbols,
+        ).fetchall()
+    }
+    exit_day = {
+        s: days[days.searchsorted(pd.Timestamp(d), side="right")]
+        for s, d in last_trade.items()
+        if pd.Timestamp(d) < days[-1]
+    }
     for s, d in last_trade.items():
         notes.append(f"{s} e delistat (ultima tranzactie {d}); pozitia se lichideaza la ultimul pret.")
     exited: set[str] = set()
@@ -151,8 +162,16 @@ def backtest(con, cfg: Config) -> Result:
                     q = net / (px[d.symbol] * (1 + cfg.fee))
                     shares[d.symbol] += q
                     cash -= q * px[d.symbol] * (1 + cfg.fee)
-                    trades.append({"date": day.date(), "symbol": d.symbol, "shares": q, "price": px[d.symbol],
-                                   "value": q * px[d.symbol], "fee": q * px[d.symbol] * cfg.fee})
+                    trades.append(
+                        {
+                            "date": day.date(),
+                            "symbol": d.symbol,
+                            "shares": q,
+                            "price": px[d.symbol],
+                            "value": q * px[d.symbol],
+                            "fee": q * px[d.symbol] * cfg.fee,
+                        }
+                    )
 
         for s, d in exit_day.items():
             if d == day and s not in exited:
@@ -189,8 +208,11 @@ def backtest(con, cfg: Config) -> Result:
     m["fees_paid"] = tr["fee"].sum() if len(tr) else 0.0
     m["dividends_gross"] = dv["gross"].sum() if len(dv) else 0.0
     m["dividend_tax"] = dv["tax"].sum() if len(dv) else 0.0
-    m["turnover_per_year"] = (tr["value"].abs().sum() - cfg.capital) / nav.mean() / max(
-        (days[-1] - days[0]).days / 365.25, 1e-9) if len(tr) else 0.0
+    m["turnover_per_year"] = (
+        (tr["value"].abs().sum() - cfg.capital) / nav.mean() / max((days[-1] - days[0]).days / 365.25, 1e-9)
+        if len(tr)
+        else 0.0
+    )
     if bench.name != analytics.BENCHMARK or days[0] < pd.Timestamp("2014-09-19"):
         notes.append("Inainte de 2014-09-19 benchmark-ul e BET (fara dividende).")
     return Result(nav, bench, holdings, tr, dv, m, notes)

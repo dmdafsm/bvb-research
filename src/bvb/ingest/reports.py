@@ -23,8 +23,11 @@ CATEGORIES = [
     ("insider", r"art\.? ?19|tranzac\w* (management|persoan|pdmr)|persoane cu (functii|responsabilitati)"),
     ("buyback", r"rascumpar|actiuni proprii"),
     ("dividend", r"dividend"),
-    ("results", r"rezultat\w* financiar|raport\w* (trimestrial|semestrial|anual)|situatii\w* financiare|"
-                r"\b(t|q)[1-4]\b|trimestrul|semestrul|preliminar"),
+    (
+        "results",
+        r"rezultat\w* financiar|raport\w* (trimestrial|semestrial|anual)|situatii\w* financiare|"
+        r"\b(t|q)[1-4]\b|trimestrul|semestrul|preliminar",
+    ),
     ("agm", r"\bag[aoe]{1,2}a?\b|adunar\w* general|convoca\w*|hotarar\w* (ag|adunar)"),
     ("calendar", r"calendar financiar"),
     ("holdings", r"detiner|prag\w* de|notificare privind (actionar|drepturi de vot)|drepturi de vot"),
@@ -39,8 +42,20 @@ CATEGORIES = [
     ("capital", r"majorare|reducere a capital|capital social|drept\w* de preferinta|oferta"),
 ]
 
-MONTHS = {"ianuarie": 1, "februarie": 2, "martie": 3, "aprilie": 4, "mai": 5, "iunie": 6, "iulie": 7,
-          "august": 8, "septembrie": 9, "octombrie": 10, "noiembrie": 11, "decembrie": 12}
+MONTHS = {
+    "ianuarie": 1,
+    "februarie": 2,
+    "martie": 3,
+    "aprilie": 4,
+    "mai": 5,
+    "iunie": 6,
+    "iulie": 7,
+    "august": 8,
+    "septembrie": 9,
+    "octombrie": 10,
+    "noiembrie": 11,
+    "decembrie": 12,
+}
 
 
 def classify(title: str) -> str:
@@ -81,13 +96,15 @@ def parse_global(html: str) -> list[dict]:
         sym = td[0].css_first("a")
         btn = td[2].css_first("input")
         title = (btn.attributes.get("value") if btn else td[2].text(strip=True)) or ""
-        rows.append({
-            "symbol": sym.text(strip=True) if sym else td[0].text(strip=True).split()[0],
-            "published": _dt(td[3].text(strip=True)),
-            "title": title.strip(),
-            "bvb_type": td[4].text(strip=True),
-            "links": _links(td[5]),
-        })
+        rows.append(
+            {
+                "symbol": sym.text(strip=True) if sym else td[0].text(strip=True).split()[0],
+                "published": _dt(td[3].text(strip=True)),
+                "title": title.strip(),
+                "bvb_type": td[4].text(strip=True),
+                "links": _links(td[5]),
+            }
+        )
     return rows
 
 
@@ -100,8 +117,15 @@ def parse_issuer_news(symbol: str, html: str) -> list[dict]:
         when = tr.css_first("p.date")
         if not btn or not when:
             continue
-        rows.append({"symbol": symbol, "published": _dt(when.text(strip=True)),
-                     "title": (btn.attributes.get("value") or "").strip(), "bvb_type": None, "links": _links(tr)})
+        rows.append(
+            {
+                "symbol": symbol,
+                "published": _dt(when.text(strip=True)),
+                "title": (btn.attributes.get("value") or "").strip(),
+                "bvb_type": None,
+                "links": _links(tr),
+            }
+        )
     return rows
 
 
@@ -150,7 +174,8 @@ def fetch_global(windows: int = 1, include_insiders: bool = True):
                     current = page.input_value("#txtDateI")
                     page.click("#lbleft")
                     page.wait_for_function(
-                        "prev => document.querySelector('#txtDateI').value !== prev", arg=current, timeout=30_000)
+                        "prev => document.querySelector('#txtDateI').value !== prev", arg=current, timeout=30_000
+                    )
                     page.wait_for_load_state("networkidle")
                     time.sleep(REQUEST_DELAY)
                 html = page.evaluate("""() => {
@@ -182,8 +207,16 @@ def store_reports(con, rows: list[dict]) -> int:
                    bvb_type = coalesce(excluded.bvb_type, reports.bvb_type),
                    url_ro = coalesce(excluded.url_ro, reports.url_ro),
                    url_en = coalesce(excluded.url_en, reports.url_en)""",
-            [r["symbol"], r["published"], r["title"], classify(r["title"]), r["bvb_type"],
-             r["links"][0] if r["links"] else None, r["links"][1] if len(r["links"]) > 1 else None])
+            [
+                r["symbol"],
+                r["published"],
+                r["title"],
+                classify(r["title"]),
+                r["bvb_type"],
+                r["links"][0] if r["links"] else None,
+                r["links"][1] if len(r["links"]) > 1 else None,
+            ],
+        )
         n += 1
     return n
 
@@ -191,5 +224,7 @@ def store_reports(con, rows: list[dict]) -> int:
 def store_calendar(con, symbol: str, events: list[dict]) -> None:
     con.execute("DELETE FROM calendar WHERE symbol = ?", [symbol])
     if events:
-        con.executemany("INSERT INTO calendar (symbol, date, kind, event) VALUES (?, ?, ?, ?)",
-                        [[e["symbol"], e["date"], e["kind"], e["event"]] for e in events])
+        con.executemany(
+            "INSERT INTO calendar (symbol, date, kind, event) VALUES (?, ?, ?, ?)",
+            [[e["symbol"], e["date"], e["kind"], e["event"]] for e in events],
+        )
