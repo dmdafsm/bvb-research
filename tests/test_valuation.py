@@ -13,18 +13,39 @@ def test_available_year():
 
 
 def test_standardize_bl_and_bank():
-    bl = {datagov.norm(k): v for k, v in {
-        "ACTIVE IMOBILIZATE - TOTAL": 100, "ACTIVE CIRCULANTE - TOTAL, din care:": 50, "CHELTUIELI IN AVANS": 5,
-        "DATORII": 40, "CAPITALURI - TOTAL, din care:": 110, "Cifra de afaceri neta": 200,
-        "VENITURI TOTALE": 210, "Profitul net": 0, "Pierdere neta": 15, "Numar mediu de salariati": 12}.items()}
+    bl = {
+        datagov.norm(k): v
+        for k, v in {
+            "ACTIVE IMOBILIZATE - TOTAL": 100,
+            "ACTIVE CIRCULANTE - TOTAL, din care:": 50,
+            "CHELTUIELI IN AVANS": 5,
+            "DATORII": 40,
+            "CAPITALURI - TOTAL, din care:": 110,
+            "Cifra de afaceri neta": 200,
+            "VENITURI TOTALE": 210,
+            "Profitul net": 0,
+            "Pierdere neta": 15,
+            "Numar mediu de salariati": 12,
+        }.items()
+    }
     s = datagov.standardize("BL", bl)
     assert (s["total_assets"], s["equity"], s["debts"], s["net_profit"], s["revenue"]) == (155, 110, 40, -15, 200)
 
-    bank = {datagov.norm(k): v for k, v in {
-        "Numerar si solduri de numerar la banci centrale": 10, "Active financiare evaluate la cost amortizat": 80,
-        "Imobilizari corporale": 5, "Datorii financiare evaluate la cost amortizat": 85, "Capital social": 3,
-        "Rezultatul reportat": 4, "Alte Rezerve": 2, "Profit sau (-) pierdere aferent(a) exercitiului": 1,
-        "Profit sau pierdere aferent/a exercitiului": 1, "Cifra de afaceri neta": 9}.items()}
+    bank = {
+        datagov.norm(k): v
+        for k, v in {
+            "Numerar si solduri de numerar la banci centrale": 10,
+            "Active financiare evaluate la cost amortizat": 80,
+            "Imobilizari corporale": 5,
+            "Datorii financiare evaluate la cost amortizat": 85,
+            "Capital social": 3,
+            "Rezultatul reportat": 4,
+            "Alte Rezerve": 2,
+            "Profit sau (-) pierdere aferent(a) exercitiului": 1,
+            "Profit sau pierdere aferent/a exercitiului": 1,
+            "Cifra de afaceri neta": 9,
+        }.items()
+    }
     b = datagov.standardize("BANK", bank)
     assert (b["total_assets"], b["debts"], b["equity"], b["net_profit"], b["cash"]) == (95, 85, 10, 1, 10)
     assert b["revenue"] is None
@@ -52,12 +73,16 @@ def con(tmp_path):
     days = pd.bdate_range("2023-01-02", "2026-03-31")
     # actiuni gratuite 1:1 la 2025-01-02: pretul brut se injumatateste
     c.executemany(
-        "INSERT INTO prices_eod (date, symbol, source, close, volume, adj_close) VALUES (?, 'AAA', 'bvb_hist', ?, 1, ?)",
-        [[d.date(), 10.0 if d < pd.Timestamp("2025-01-02") else 5.0, 5.0] for d in days])
+        "INSERT INTO prices_eod (date, symbol, source, close, volume, adj_close) "
+        "VALUES (?, 'AAA', 'bvb_hist', ?, 1, ?)",
+        [[d.date(), 10.0 if d < pd.Timestamp("2025-01-02") else 5.0, 5.0] for d in days],
+    )
     c.execute("INSERT INTO instruments (symbol, market, shares) VALUES ('AAA', 'REGS', 2000)")
-    c.executemany("INSERT INTO fundamentals (symbol, year, kind, revenue, net_profit, equity, total_assets, debts) "
-                  "VALUES ('AAA', ?, 'BL', ?, ?, ?, ?, ?)",
-                  [[2023, 1000, 100, 1000, 1500, 500], [2024, 1200, 200, 1100, 1700, 600]])
+    c.executemany(
+        "INSERT INTO fundamentals (symbol, year, kind, revenue, net_profit, equity, total_assets, debts) "
+        "VALUES ('AAA', ?, 'BL', ?, ?, ?, ?, ?)",
+        [[2023, 1000, 100, 1000, 1500, 500], [2024, 1200, 200, 1100, 1700, 600]],
+    )
     c.execute("INSERT INTO dividends (symbol, fiscal_year, amount, ex_date) VALUES ('AAA', 2024, 0.05, '2025-06-02')")
     adjust.run(c, ["AAA"])
     yield c
@@ -66,7 +91,7 @@ def con(tmp_path):
 
 def test_market_cap_is_continuous_over_bonus_issue(con):
     mcap = valuation.market_cap_series(con, "AAA")
-    assert mcap.iloc[0] == pytest.approx(10_000)   # 1000 actiuni * 10 lei
+    assert mcap.iloc[0] == pytest.approx(10_000)  # 1000 actiuni * 10 lei
     assert mcap.iloc[-1] == pytest.approx(10_000)  # 2000 actiuni * 5 lei
 
 

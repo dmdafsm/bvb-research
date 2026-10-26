@@ -31,6 +31,7 @@ STATE_CONTROL_PCT = 50.0
 
 # --- estimare --------------------------------------------------------------
 
+
 def ledoit_wolf(x: np.ndarray) -> tuple[np.ndarray, float]:
     """Covarianta cu shrinkage Ledoit-Wolf catre identitate scalata. -> (cov, intensitate)"""
     x = x - x.mean(axis=0)
@@ -41,8 +42,8 @@ def ledoit_wolf(x: np.ndarray) -> tuple[np.ndarray, float]:
     d2 = ((s - target) ** 2).sum()
     if d2 == 0:
         return s, 0.0
-    sq = (x ** 2).sum(axis=1)
-    b2 = min(((sq ** 2).sum() - n * (s ** 2).sum()) / n ** 2, d2)
+    sq = (x**2).sum(axis=1)
+    b2 = min(((sq**2).sum() - n * (s**2).sum()) / n**2, d2)
     shrink = b2 / d2
     return shrink * target + (1 - shrink) * s, float(shrink)
 
@@ -57,6 +58,7 @@ def returns_matrix(con, symbols: list[str], end: date | None, years: float, week
 
 
 # --- VaR / CVaR --------------------------------------------------------------
+
 
 def historical_var(r: pd.Series, conf: float) -> tuple[float, float]:
     """-> (VaR, CVaR) ca pierderi pozitive."""
@@ -73,17 +75,18 @@ def parametric_var(sigma: float, conf: float) -> tuple[float, float]:
 def risk_contributions(w: np.ndarray, cov: np.ndarray) -> tuple[float, np.ndarray]:
     """-> (volatilitate portofoliu, contributia fiecarei pozitii ca fractie din risc)"""
     sigma = float(np.sqrt(w @ cov @ w))
-    return sigma, w * (cov @ w) / sigma ** 2
+    return sigma, w * (cov @ w) / sigma**2
 
 
 # --- rezultate ---------------------------------------------------------------
+
 
 @dataclass
 class RiskReport:
     as_of: date
     window: tuple[date, date]
-    var: pd.DataFrame            # pe niveluri de incredere: historical / parametric, VaR si CVaR
-    positions: pd.DataFrame      # pondere, volatilitate, beta, contributie la risc, lichiditate
+    var: pd.DataFrame  # pe niveluri de incredere: historical / parametric, VaR si CVaR
+    positions: pd.DataFrame  # pondere, volatilitate, beta, contributie la risc, lichiditate
     correlation: pd.DataFrame
     stress: pd.DataFrame
     concentration: dict
@@ -111,24 +114,47 @@ def stress_tests(con, weights: pd.Series, betas: pd.Series, end: date | None) ->
                 rets[sym] = betas.get(sym, 1.0) * b_ret
                 proxied.append(sym)
         p_ret = float(sum(weights[k] * v for k, v in rets.items()))
-        rows.append({"scenario": name, "start": start, "end": stop, "portfolio": p_ret,
-                     "benchmark": b_ret, "proxied": ", ".join(proxied)})
+        rows.append(
+            {
+                "scenario": name,
+                "start": start,
+                "end": stop,
+                "portfolio": p_ret,
+                "benchmark": b_ret,
+                "proxied": ", ".join(proxied),
+            }
+        )
     for shock in INDEX_SHOCKS:
-        rows.append({"scenario": f"BET-TR {shock:.0%} (prin beta)", "start": None, "end": None,
-                     "portfolio": float((weights * betas.reindex(weights.index).fillna(1.0)).sum() * shock),
-                     "benchmark": shock, "proxied": ""})
+        rows.append(
+            {
+                "scenario": f"BET-TR {shock:.0%} (prin beta)",
+                "start": None,
+                "end": None,
+                "portfolio": float((weights * betas.reindex(weights.index).fillna(1.0)).sum() * shock),
+                "benchmark": shock,
+                "proxied": "",
+            }
+        )
     return pd.DataFrame(rows)
 
 
 def concentration(con, weights: pd.Series) -> tuple[dict, pd.Series]:
     syms = list(weights.index)
-    info = con.execute(f"""
+    info = (
+        con.execute(
+            f"""
         SELECT i.symbol, coalesce(i.sector, 'NECUNOSCUT') AS sector, coalesce(i.currency, 'RON') AS currency,
                coalesce(s.state_pct, 0) AS state_pct
         FROM instruments i LEFT JOIN state_ownership s USING (symbol)
-        WHERE i.symbol IN ({','.join('?' * len(syms))})
-    """, syms).df().set_index("symbol").reindex(syms)
-    hhi = float((weights ** 2).sum())
+        WHERE i.symbol IN ({",".join("?" * len(syms))})
+    """,
+            syms,
+        )
+        .df()
+        .set_index("symbol")
+        .reindex(syms)
+    )
+    hhi = float((weights**2).sum())
     sorted_w = weights.sort_values(ascending=False)
     by_sector = weights.groupby(info["sector"]).sum().sort_values(ascending=False)
     out = {
@@ -145,15 +171,22 @@ def concentration(con, weights: pd.Series) -> tuple[dict, pd.Series]:
     return out, by_sector
 
 
-def liquidity_risk(con, weights: pd.Series, value: float, end: date, participation: float,
-                   days: int = 182) -> pd.DataFrame:
+def liquidity_risk(
+    con, weights: pd.Series, value: float, end: date, participation: float, days: int = 182
+) -> pd.DataFrame:
     """Zile necesare lichidarii fiecarei pozitii la `participation` din valoarea medie zilnica."""
     liq = analytics.liquidity(con, list(weights.index), end, days=days)
     position = weights * value
     capacity = liq["adv_value"].fillna(0) * participation
     d2l = (position / capacity).replace(np.inf, np.nan)
-    return pd.DataFrame({"position": position, "adv_value": liq["adv_value"],
-                         "pct_days_traded": liq["pct_days_traded"], "days_to_liquidate": d2l})
+    return pd.DataFrame(
+        {
+            "position": position,
+            "adv_value": liq["adv_value"],
+            "pct_days_traded": liq["pct_days_traded"],
+            "days_to_liquidate": d2l,
+        }
+    )
 
 
 def liquidatable_share(liq: pd.DataFrame, weights: pd.Series, horizon_days: int) -> float:
@@ -163,9 +196,16 @@ def liquidatable_share(liq: pd.DataFrame, weights: pd.Series, horizon_days: int)
     return float((weights * frac).sum())
 
 
-def report(con, weights: dict[str, float], value: float = 100_000.0, end: date | None = None,
-           years: float = 3.0, horizon: int = 1, confidences=(0.95, 0.99),
-           participation: float = 0.2) -> RiskReport:
+def report(
+    con,
+    weights: dict[str, float],
+    value: float = 100_000.0,
+    end: date | None = None,
+    years: float = 3.0,
+    horizon: int = 1,
+    confidences=(0.95, 0.99),
+    participation: float = 0.2,
+) -> RiskReport:
     w = pd.Series(weights, dtype=float)
     w = w / w.sum()
     symbols = list(w.index)
@@ -176,8 +216,10 @@ def report(con, weights: dict[str, float], value: float = 100_000.0, end: date |
     if len(complete) < 60:
         raise ValueError("Prea putine zile comune pentru estimare (minim 60).")
     if len(complete) < len(daily) * 0.9:
-        notes.append(f"Doar {len(complete)} din {len(daily)} zile au date pentru toate pozitiile "
-                     "(listare recenta); estimarea foloseste perioada comuna.")
+        notes.append(
+            f"Doar {len(complete)} din {len(daily)} zile au date pentru toate pozitiile "
+            "(listare recenta); estimarea foloseste perioada comuna."
+        )
     as_of = complete.index[-1].date()
     port = complete @ w.values
 
@@ -189,28 +231,40 @@ def report(con, weights: dict[str, float], value: float = 100_000.0, end: date |
     for c in confidences:
         hv, hcv = historical_var(port_h, c)
         pv, pcv = parametric_var(sigma_d * np.sqrt(horizon), c)
-        var_rows.append({"confidence": c, "hist_var": hv, "hist_cvar": hcv, "param_var": pv, "param_cvar": pcv,
-                         "hist_var_ron": hv * value, "hist_cvar_ron": hcv * value})
+        var_rows.append(
+            {
+                "confidence": c,
+                "hist_var": hv,
+                "hist_cvar": hcv,
+                "param_var": pv,
+                "param_cvar": pcv,
+                "hist_var_ron": hv * value,
+                "hist_cvar_ron": hcv * value,
+            }
+        )
     var = pd.DataFrame(var_rows).set_index("confidence")
 
-    weekly = returns_matrix(con, symbols + [analytics.BENCHMARK], end, years, weekly=True).dropna()
+    weekly = returns_matrix(con, [*symbols, analytics.BENCHMARK], end, years, weekly=True).dropna()
     corr = weekly[symbols].corr()
     bench_w = weekly[analytics.BENCHMARK]
     betas = weekly[symbols].apply(lambda col: np.cov(col, bench_w)[0, 1] / bench_w.var())
 
     liq = liquidity_risk(con, w, value, as_of, participation)
-    positions = pd.DataFrame({
-        "weight": w,
-        "volatility": complete.std() * np.sqrt(analytics.TRADING_DAYS),
-        "beta_weekly": betas,
-        "risk_contribution": pd.Series(rc, index=symbols),
-        "pct_days_traded": liq["pct_days_traded"],
-        "days_to_liquidate": liq["days_to_liquidate"],
-    })
+    positions = pd.DataFrame(
+        {
+            "weight": w,
+            "volatility": complete.std() * np.sqrt(analytics.TRADING_DAYS),
+            "beta_weekly": betas,
+            "risk_contribution": pd.Series(rc, index=symbols),
+            "pct_days_traded": liq["pct_days_traded"],
+            "days_to_liquidate": liq["days_to_liquidate"],
+        }
+    )
     conc, by_sector = concentration(con, w)
     conc["portfolio_vol"] = sigma_d * np.sqrt(analytics.TRADING_DAYS)
     for h in (1, 5, 20):
         conc[f"liquidatable_{h}d"] = liquidatable_share(liq, w, h)
     stress = stress_tests(con, w, betas, end)
-    return RiskReport(as_of, (complete.index[0].date(), as_of), var, positions, corr, stress, conc,
-                      by_sector, shrink, notes)
+    return RiskReport(
+        as_of, (complete.index[0].date(), as_of), var, positions, corr, stress, conc, by_sector, shrink, notes
+    )
