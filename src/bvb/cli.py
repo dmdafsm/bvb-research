@@ -863,6 +863,14 @@ def daily(
 
 
 @app.command()
+def schedule():
+    """Ruleaza `daily` in zilele lucratoare la 19:15 si `daily --full` sambata (pentru containerul de ingestie)."""
+    from bvb import scheduler
+
+    scheduler.loop(log=lambda m: typer.echo(m))
+
+
+@app.command()
 def snapshot():
     """Publica acum copia pentru citire (dashboard); se face automat la finalul comenzilor care scriu."""
     db.publish_snapshot(db.connect())
@@ -870,7 +878,12 @@ def snapshot():
 
 
 @app.command()
-def dashboard(port: int = typer.Option(8501)):
+def dashboard(
+    port: int = typer.Option(8501),
+    address: str = typer.Option(
+        "127.0.0.1", help="Adresa de ascultare; 0.0.0.0 doar in container, fara port publicat (ADR 0004)."
+    ),
+):
     """Porneste dashboard-ul Streamlit (http://localhost:8501)."""
     import subprocess
     import sys
@@ -887,7 +900,7 @@ def dashboard(port: int = typer.Option(8501)):
             "--server.port",
             str(port),
             "--server.address",
-            "127.0.0.1",  # doar local: datele BVB sunt pentru uz personal
+            address,  # implicit doar local: datele BVB sunt pentru uz personal
             "--server.headless",
             "true",
             "--browser.gatherUsageStats",

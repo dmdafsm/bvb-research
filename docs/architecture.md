@@ -18,6 +18,7 @@ analytics / CLI reports read data/bvb.duckdb directly
 - **Derivations** (`adjust`) recompute tables from collected data and can always be rebuilt.
 - **Analytics** (`analytics`, `valuation`, `portfolio`, `risk`) are pure reads plus pandas/numpy; they never call the network.
 - **Presentation**: `cli.py` (text reports), `dashboard.py` (Streamlit), `alerts.py`.
+- **Scheduling**: `scheduler.py` (`bvb schedule`), used by the `ingest` container in `compose.yaml` ([ADR 0004](engineering/decisions/0004-docker-compose.md)).
 
 ## Modules and table ownership
 
