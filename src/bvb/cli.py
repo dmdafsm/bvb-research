@@ -910,6 +910,8 @@ def dashboard(
             "true",
             "--browser.gatherUsageStats",
             "false",
+            "--client.toolbarMode",
+            "minimal",  # fara Deploy si meniul Streamlit (setari, inregistrare ecran)
         ],
         check=False,
     )
