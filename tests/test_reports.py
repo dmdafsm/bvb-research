@@ -126,3 +126,12 @@ def test_normalize_merges_existing_duplicates_and_reclassifies(tmp_path):
         (datetime(2026, 10, 23, 10, 0), "agm", None, None),
     ]
     assert reports.normalize(con) == 0  # idempotent
+
+
+def test_notify_without_osascript_is_skipped(monkeypatch):
+    from bvb import alerts
+
+    monkeypatch.setattr(alerts.shutil, "which", lambda _: None)
+    monkeypatch.setattr(alerts.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("apelat")))
+    assert alerts.notify(["[pret] AAA +6.0%"]) is False
+    assert alerts.notify([]) is False
