@@ -1,7 +1,7 @@
-"""Dashboard local (Streamlit) peste baza DuckDB. Pornire: `uv run bvb dashboard`.
+"""Dashboard local (Streamlit). Pornire: `uv run bvb dashboard`.
 
-Deschide baza doar pentru citire; daca o colectare ruleaza in acelasi timp,
-pagina afiseaza un mesaj si poate fi reincarcata dupa ce colectarea se termina.
+Citeste copia `bvb_read.duckdb`, publicata la finalul fiecarei comenzi care scrie,
+deci merge si in timpul colectarilor; cand apare o copie noua, se redeschide singur.
 """
 
 from datetime import date, timedelta
@@ -11,31 +11,47 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from bvb import analytics, db, portfolio, risk, valuation
+from bvb.config import READ_PATH
 
 st.set_page_config(page_title="BVB Research", layout="wide")
 
-
-@st.cache_resource
-def connection():
-    return db.connect(read_only=True)
-
-
-try:
-    con = connection()
-except Exception as e:  # baza e blocata de o colectare in curs
-    st.error(f"Baza de date nu poate fi deschisa acum ({e}). Reincearca dupa ce colectarea se termina.")
+if not READ_PATH.exists():
+    st.error("Nu exista inca o copie a bazei pentru citire. Ruleaza o colectare (ex. `uv run bvb status`) "
+             "sau `uv run bvb snapshot`.")
     st.stop()
 
+VERSION = READ_PATH.stat().st_mtime  # cheia cache-urilor: se schimba la fiecare copie noua
 
-@st.cache_data(ttl=600)
-def instruments() -> pd.DataFrame:
+
+@st.cache_resource
+def _holder() -> dict:
+    return {"version": None, "con": None}
+
+
+def connection(version: float):
+    """O singura conexiune pe proces; la o copie noua inchidem explicit conexiunea veche
+    (DuckDB refoloseste instanta deschisa pentru aceeasi cale, deci n-ar vedea copia noua)."""
+    h = _holder()
+    if h["version"] != version:
+        if h["con"] is not None:
+            h["con"].close()
+        h["con"] = db.connect(READ_PATH, read_only=True)
+        h["version"] = version
+    return h["con"]
+
+
+con = connection(VERSION)
+
+
+@st.cache_data(max_entries=1)
+def instruments(version: float) -> pd.DataFrame:
     return con.execute("""
         SELECT symbol, name, market, sector, isin FROM instruments
         WHERE market <> 'INDEX' ORDER BY symbol""").df()
 
 
-@st.cache_data(ttl=600)
-def watchlist() -> list[str]:
+@st.cache_data(max_entries=1)
+def watchlist(version: float) -> list[str]:
     return [r[0] for r in con.execute("SELECT symbol FROM watchlist ORDER BY symbol").fetchall()]
 
 
@@ -58,9 +74,9 @@ def normalized_chart(series: dict[str, pd.Series], title: str, log: bool = False
 # --- pagini ----------------------------------------------------------------------
 
 def page_stock():
-    inst = instruments()
+    inst = instruments(VERSION)
     labels = {r.symbol: f"{r.symbol} — {r.name}" for r in inst.itertuples()}
-    default = watchlist()[0] if watchlist() else "TLV"
+    default = watchlist(VERSION)[0] if watchlist(VERSION) else "TLV"
     symbol = st.sidebar.selectbox("Emitent", list(labels), index=list(labels).index(default) if default in labels else 0,
                                   format_func=labels.get)
     years = st.sidebar.select_slider("Perioada grafic (ani)", options=[1, 3, 5, 10, 20, 30], value=5)
@@ -148,8 +164,8 @@ def page_stock():
                  column_config={"url": st.column_config.LinkColumn("Link")})
 
 
-@st.cache_data(ttl=3600)
-def screen_table(market: str, years: int) -> pd.DataFrame:
+@st.cache_data(max_entries=8)
+def screen_table(market: str, years: int, version: float) -> pd.DataFrame:
     df = analytics.screen(con, market, years)
     val = valuation.current_multiples(con, list(df.index))
     if len(val):
@@ -162,7 +178,7 @@ def page_screen():
     market = st.sidebar.selectbox("Piata", ["REGS", "XRS1", "XRSI"])
     years = st.sidebar.select_slider("Fereastra (ani)", options=[1, 3, 5, 10], value=3)
     min_traded = st.sidebar.slider("Minim zile cu tranzactii (1 an)", 0.0, 1.0, 0.8, 0.05)
-    df = screen_table(market, years)
+    df = screen_table(market, years, VERSION)
     df = df[df["pct_days_traded"].fillna(0) >= min_traded]
     st.caption(f"{len(df)} actiuni · randament total vs BET-TR · multipli pe ultimul exercitiu (situatii individuale)")
     pct_cols = ["cagr", "volatility", "max_drawdown", "div_yield", "pct_days_traded", "roe", "net_margin", "pe_pctile_10y"]
@@ -173,7 +189,7 @@ def page_screen():
 
 def page_portfolio():
     st.title("Portofoliu")
-    text = st.sidebar.text_input("Ponderi", value=", ".join(f"{s}" for s in watchlist()[:5]) or "TLV, SNP, H2O")
+    text = st.sidebar.text_input("Ponderi", value=", ".join(f"{s}" for s in watchlist(VERSION)[:5]) or "TLV, SNP, H2O")
     value = st.sidebar.number_input("Valoare (RON)", value=100_000, step=10_000)
     start = st.sidebar.date_input("Start backtest", value=date(2020, 1, 1))
     rebalance = st.sidebar.selectbox("Rebalansare", ["none", "monthly", "quarterly", "yearly"], index=2)
@@ -230,7 +246,7 @@ def page_portfolio():
 
 def page_events():
     st.title("Calendar si anunturi")
-    only_watch = st.sidebar.checkbox("Doar lista de urmarire", value=bool(watchlist()))
+    only_watch = st.sidebar.checkbox("Doar lista de urmarire", value=bool(watchlist(VERSION)))
     days = st.sidebar.slider("Zile", 7, 90, 30)
     cond = "symbol IN (SELECT symbol FROM watchlist)" if only_watch else "1=1"
     st.subheader("Urmeaza")
@@ -256,4 +272,7 @@ def page_events():
 PAGES = {"Emitent": page_stock, "Screener": page_screen, "Portofoliu": page_portfolio, "Calendar si anunturi": page_events}
 choice = st.sidebar.radio("Pagina", list(PAGES))
 PAGES[choice]()
+from datetime import datetime as _dt
+
+st.sidebar.caption(f"Date actualizate: {_dt.fromtimestamp(VERSION):%d.%m.%Y %H:%M}")
 st.sidebar.caption("Date: bvb.ro (uz personal), data.gov.ro (CC-BY 4.0). Nu reprezinta recomandari de investitii.")

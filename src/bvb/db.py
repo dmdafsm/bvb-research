@@ -1,9 +1,12 @@
+import atexit
 import json
+import os
+import shutil
 from datetime import datetime
 
 import duckdb
 
-from bvb.config import DB_PATH
+from bvb.config import DB_PATH, READ_PATH
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS instruments (
@@ -196,13 +199,41 @@ SELECT * EXCLUDE (rn) FROM (
 """
 
 
+_writer: duckdb.DuckDBPyConnection | None = None
+
+
 def connect(path=DB_PATH, read_only: bool = False) -> duckdb.DuckDBPyConnection:
+    global _writer
     if read_only:
         return duckdb.connect(str(path), read_only=True)
     path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(path))
     con.execute(SCHEMA)
+    if path == DB_PATH and _writer is None:
+        # la iesirea din proces publicam copia pentru citire
+        _writer = con
+        atexit.register(_publish_at_exit)
     return con
+
+
+def publish_snapshot(con, src=DB_PATH, dst=READ_PATH) -> None:
+    """Copiaza baza intr-un fisier separat pentru citire, atomic (copie temporara + rename).
+
+    CHECKPOINT scrie in fisierul principal tot ce e inca in WAL, ca copia sa fie completa.
+    Un cititor care are deja copia veche deschisa o pastreaza pana o redeschide.
+    """
+    con.execute("CHECKPOINT")
+    tmp = dst.with_name(dst.name + ".tmp")
+    shutil.copyfile(src, tmp)
+    os.replace(tmp, dst)
+
+
+def _publish_at_exit() -> None:
+    try:
+        if _writer is not None:
+            publish_snapshot(_writer)
+    except Exception as e:  # nu stricam iesirea comenzii din cauza copiei
+        print(f"Atentie: copia pentru citire nu a fost actualizata ({e!r})")
 
 
 def log_ingest(con, job: str, params: dict, status: str, rows: int = 0, message: str = "") -> None:

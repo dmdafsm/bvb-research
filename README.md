@@ -100,7 +100,7 @@ uv run bvb daily                                  # dupa 18:30: preturi, rapoart
 uv run bvb daily --full                           # saptamanal: + istoric grafic, indici, fise emitenti
 ```
 
-DuckDB permite un singur proces care scrie: oprește dashboard-ul în timpul colectărilor.
+Dashboard-ul citește `data/bvb_read.duckdb`, o copie publicată automat la finalul fiecărei comenzi care scrie (sau manual cu `uv run bvb snapshot`). Poate rula deci în timpul colectărilor și arată datele de la ultima comandă terminată; când apare o copie nouă, se redeschide singur (ora apare în bara laterală).
 
 ## Companii delistate
 
