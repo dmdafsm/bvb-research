@@ -1,6 +1,8 @@
 """Alerte pentru lista de urmarire: anunturi noi, date ex-dividend apropiate,
-miscari mari de pret. Optional, notificare macOS (osascript)."""
+miscari mari de pret. Optional, notificare de sistem pe macOS (osascript); pe alte sisteme alertele
+raman doar in iesirea comenzii."""
 
+import shutil
 import subprocess
 from datetime import datetime
 
@@ -48,12 +50,16 @@ def collect(con, move_threshold: float = 0.05, exdiv_days: int = 7) -> list[str]
     return out
 
 
-def notify(lines: list[str], title: str = "BVB") -> None:
+def notify(lines: list[str], title: str = "BVB") -> bool:
+    """Notificare de sistem pe macOS. -> False daca nu e disponibila (alt sistem, container)."""
     if not lines:
-        return
+        return False
+    if shutil.which("osascript") is None:
+        return False
     body = "; ".join(lines[:3]) + (f" (+{len(lines) - 3})" if len(lines) > 3 else "")
     script = f"display notification {_quote(body)} with title {_quote(title)}"
     subprocess.run(["osascript", "-e", script], check=False, capture_output=True)
+    return True
 
 
 def _quote(s: str) -> str:

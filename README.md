@@ -8,6 +8,8 @@ Instrument personal de analiză pentru companiile listate la BVB. Plan: [docs/pl
 
 ## Instalare
 
+Merge pe macOS, Linux și Windows: Python 3.12 cu [uv](https://docs.astral.sh/uv/) sau doar Docker (vezi mai jos).
+
 ```bash
 uv sync
 uv run playwright install chromium
@@ -124,7 +126,8 @@ Dashboard-ul citește baza doar pentru citire, așa că nu poate modifica lista;
 
 ```bash
 uv run bvb dashboard                              # http://localhost:8501 (Emitent, Screener, Portofoliu, Calendar, Invatare)
-uv run bvb alerts --notify                        # anunturi noi, ex-dividend in 7 zile, miscari > 5%
+uv run bvb alerts                                 # anunturi noi, ex-dividend in 7 zile, miscari > 5%
+uv run bvb alerts --notify                        # idem + notificare de sistem (doar macOS)
 uv run bvb daily                                  # dupa 18:30: preturi, rapoarte, stiri, ajustari, alerte
 uv run bvb daily --full                           # saptamanal: + istoric grafic, indici, fise emitenti
 ```
@@ -133,7 +136,7 @@ Dashboard-ul citește `data/bvb_read.duckdb`, o copie publicată automat la fina
 
 ## Docker
 
-Alternativă la rularea manuală: ingestia programată și dashboard-ul în containere ([ADR 0004](docs/engineering/decisions/0004-docker-compose.md)). Datele rămân în `./data` pe Mac.
+Alternativă la rularea manuală: ingestia programată și dashboard-ul în containere ([ADR 0004](docs/engineering/decisions/0004-docker-compose.md)). Datele rămân în `./data` pe calculatorul gazdă.
 
 ```bash
 docker compose up -d --build                         # porneste ingestia programata si dashboard-ul
@@ -143,8 +146,8 @@ docker compose down                                  # oprire
 ```
 
 - Dashboard: http://localhost:8501, publicat doar pe `127.0.0.1`.
-- Cât rulează containerul `ingest`, nu porni comenzi care scriu de pe Mac (`uv run bvb ingest ...`, `adjust`, `watch`): DuckDB acceptă un singur proces care scrie. Comenzile de citire pot rula oricând.
-- Notificările macOS (`--notify`) nu funcționează din container; alertele apar în `docker compose logs ingest`.
+- Cât rulează containerul `ingest`, nu porni comenzi care scriu de pe calculatorul gazdă (`uv run bvb ingest ...`, `adjust`, `watch`): DuckDB acceptă un singur proces care scrie. Comenzile de citire pot rula oricând.
+- `--notify` trimite notificări doar pe macOS și nu funcționează din container; alertele apar în `docker compose logs ingest`.
 
 ## Companii delistate
 

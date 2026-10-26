@@ -820,7 +820,7 @@ def news_cmd(
 
 @app.command()
 def alerts(
-    notify: bool = typer.Option(False, help="Trimite si o notificare macOS."),
+    notify: bool = typer.Option(False, help="Trimite si o notificare de sistem (doar macOS)."),
     move: float = typer.Option(0.05, help="Prag pentru miscarea de pret din ultima sedinta."),
 ):
     """Anunturi noi, ex-dividend in 7 zile si miscari mari pentru lista de urmarire."""
@@ -828,14 +828,14 @@ def alerts(
 
     lines = alerts_mod.collect(db.connect(), move_threshold=move)
     typer.echo("\n".join(lines) if lines else "Nimic nou pentru lista de urmarire.")
-    if notify:
-        alerts_mod.notify(lines)
+    if notify and lines and not alerts_mod.notify(lines):
+        typer.echo("(notificarea de sistem e disponibila doar pe macOS; alertele sunt mai sus)")
 
 
 @app.command()
 def daily(
     full: bool = typer.Option(False, help="Si actualizarile saptamanale: istoric grafic, fise emitenti, metadate."),
-    notify: bool = typer.Option(False, help="Notificare macOS cu alertele."),
+    notify: bool = typer.Option(False, help="Notificare de sistem cu alertele (doar macOS)."),
 ):
     """Rularea zilnica (dupa 18:30): preturi, anunturi, stiri, ajustari, alerte."""
     steps = [

@@ -10,7 +10,7 @@ Surse și fezabilitate: [surse-date.md](surse-date.md).
 | Stocare | DuckDB (un fișier local) + PDF-uri pe disc | analitic, rapid, zero server |
 | Colectare BVB | Playwright (Chromium headless) pe paginile publice | bvb.ro nu răspunde la clienți HTTP simpli; un browser real, rulat o dată pe zi, ritm lent |
 | Interfață | Streamlit | dashboard local rapid; notebook-uri pentru explorare |
-| Programare | `launchd` pe macOS, zilnic la ~19:00 | după închiderea pieței (18:00) |
+| Programare | containerul `ingest` din Docker Compose: zilnic la 19:15, sâmbăta rularea completă ([ADR 0004](engineering/decisions/0004-docker-compose.md)) | după închiderea pieței; independent de sistemul de operare |
 | Monedă | RON; conversie EUR/USD prin BNR | |
 
 Reguli de colectare: doar pagini publice, o rulare pe zi, pauze între cereri, cache local (nu se re-descarcă ce există deja), date doar pentru uz personal.
@@ -67,9 +67,9 @@ Reguli de colectare: doar pagini publice, o rulare pe zi, pauze între cereri, c
 - Construcție: ponderi egale, minimă varianță, risk parity, cu constrângeri de lichiditate.
 - Analiză „what-if”: adaug/scot o poziție → impact asupra riscului.
 
-## Faza 8 — Interfață ✅ (Streamlit + alerte; programarea automată rămâne de configurat)
+## Faza 8 — Interfață ✅ (Streamlit + alerte; programarea automată prin Docker Compose)
 - Streamlit: pagină emitent (grafic, fundamentale, dividende, anunțuri), screener, portofolii, risc, calendar.
-- Alerte locale (notificare macOS): anunț nou pentru un emitent urmărit, ex-dividend apropiat, mișcare > X%.
+- Alerte locale (în terminal sau log; notificare de sistem opțională pe macOS): anunț nou pentru un emitent urmărit, ex-dividend apropiat, mișcare > X%.
 
 ## Ordine recomandată și criterii de „gata”
 | Pas | Gata când |
