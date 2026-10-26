@@ -102,6 +102,21 @@ uv run bvb daily --full                           # saptamanal: + istoric grafic
 
 Dashboard-ul citește `data/bvb_read.duckdb`, o copie publicată automat la finalul fiecărei comenzi care scrie (sau manual cu `uv run bvb snapshot`). Poate rula deci în timpul colectărilor și arată datele de la ultima comandă terminată; când apare o copie nouă, se redeschide singur (ora apare în bara laterală).
 
+## Docker
+
+Alternativă la rularea manuală: ingestia programată și dashboard-ul în containere ([ADR 0004](docs/engineering/decisions/0004-docker-compose.md)). Datele rămân în `./data` pe Mac.
+
+```bash
+docker compose up -d --build                         # porneste ingestia programata si dashboard-ul
+docker compose logs -f ingest                        # rularile: daily L-V 19:15, daily --full sambata 10:00
+docker compose run --rm ingest bvb ingest history    # o comanda ocazionala in container
+docker compose down                                  # oprire
+```
+
+- Dashboard: http://localhost:8501, publicat doar pe `127.0.0.1`.
+- Cât rulează containerul `ingest`, nu porni comenzi care scriu de pe Mac (`uv run bvb ingest ...`, `adjust`, `watch`): DuckDB acceptă un singur proces care scrie. Comenzile de citire pot rula oricând.
+- Notificările macOS (`--notify`) nu funcționează din container; alertele apar în `docker compose logs ingest`.
+
 ## Companii delistate
 
 ```bash

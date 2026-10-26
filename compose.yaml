@@ -1,0 +1,29 @@
+# Uz personal (ADR 0004): ingestia scrie in ./data, dashboard-ul citeste copia.
+#   docker compose up -d --build                          # pornire
+#   docker compose logs -f ingest                         # rularile programate
+#   docker compose run --rm ingest bvb ingest history     # comanda ocazionala
+# Nu rula in paralel `uv run bvb ingest ...` pe host: un singur proces scrie in DuckDB.
+
+services:
+  ingest:
+    build:
+      context: .
+      target: ingest
+    image: bvb-research-ingest:local
+    restart: unless-stopped
+    init: true
+    ipc: host  # Chromium are nevoie de mai mult /dev/shm decat implicitul de 64 MB
+    volumes:
+      - ./data:/data
+
+  dashboard:
+    build:
+      context: .
+      target: dashboard
+    image: bvb-research-dashboard:local
+    restart: unless-stopped
+    init: true
+    volumes:
+      - ./data:/data:ro
+    ports:
+      - "127.0.0.1:8501:8501"  # doar pe Mac; accesul de la distanta se adauga separat
