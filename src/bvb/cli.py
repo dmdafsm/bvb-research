@@ -717,6 +717,13 @@ def daily(
 
 
 @app.command()
+def snapshot():
+    """Publica acum copia pentru citire (dashboard); se face automat la finalul comenzilor care scriu."""
+    db.publish_snapshot(db.connect())
+    typer.echo(f"Copie actualizata: {db.READ_PATH}")
+
+
+@app.command()
 def dashboard(port: int = typer.Option(8501)):
     """Porneste dashboard-ul Streamlit (http://localhost:8501)."""
     import subprocess
