@@ -91,10 +91,35 @@ uv run bvb calendar -w --days 30                  # rezultate, AGA, date ex-divi
 uv run bvb news -w
 ```
 
+## Lista de urmărire
+
+Companiile pe care le urmărești îndeaproape (tabelul `watchlist`). Se modifică din linia de comandă:
+
+```bash
+uv run bvb watch list                             # afiseaza lista
+uv run bvb watch add EL TGN                       # adauga simboluri
+uv run bvb watch remove BRD                       # scoate simboluri
+```
+
+Cu Docker, aceleași comenzi rulează în containerul de ingestie, în afara rulării programate (după 19:15 în zilele lucrătoare, sâmbătă de la 10:00):
+
+```bash
+docker compose run --rm ingest bvb watch add EL TGN
+```
+
+Unde contează lista:
+
+- **Emitent**: filtrul „Doar lista de urmarire” și emitentul afișat implicit (primul din listă).
+- **Calendar și anunțuri**: bifa „Doar lista de urmarire” limitează evenimentele, anunțurile și știrile.
+- **Portofoliu**: ponderile implicite pornesc de la primele 5 simboluri.
+- **Ingestie zilnică**: alertele (anunțuri noi, dată ex-dividend în 7 zile, mișcări de peste 5%) și extragerea textului din PDF-urile rapoartelor (`ingest report-texts`) se fac doar pentru lista de urmărire.
+
+Dashboard-ul citește baza doar pentru citire, așa că nu poate modifica lista; o schimbare apare în dashboard după următoarea copie publicată (automat la finalul comenzii `watch`).
+
 ## Dashboard, alerte, rulare zilnică
 
 ```bash
-uv run bvb dashboard                              # http://localhost:8501 (Emitent, Screener, Portofoliu, Calendar)
+uv run bvb dashboard                              # http://localhost:8501 (Emitent, Screener, Portofoliu, Calendar, Invatare)
 uv run bvb alerts --notify                        # anunturi noi, ex-dividend in 7 zile, miscari > 5%
 uv run bvb daily                                  # dupa 18:30: preturi, rapoarte, stiri, ajustari, alerte
 uv run bvb daily --full                           # saptamanal: + istoric grafic, indici, fise emitenti
