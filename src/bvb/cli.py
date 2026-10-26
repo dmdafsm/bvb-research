@@ -913,6 +913,7 @@ def dashboard(
             "--client.toolbarMode",
             "minimal",  # fara Deploy si meniul Streamlit (setari, inregistrare ecran)
         ],
+        cwd=path.parent,  # Streamlit citeste tema din src/bvb/.streamlit/config.toml
         check=False,
     )
 

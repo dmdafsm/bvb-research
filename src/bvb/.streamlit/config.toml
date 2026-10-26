@@ -1,0 +1,42 @@
+# Tema dashboard-ului: Material Design 3, culoare de baza albastru-petrol.
+# Streamlit citeste acest fisier pentru ca `bvb dashboard` porneste din src/bvb.
+# Culorile graficelor: paleta categoriala validata (CVD, contrast) pentru ambele moduri.
+
+[theme]
+font = "Roboto:https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap"
+headingFont = "Roboto:https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap"
+headingFontWeights = [500, 500, 500]
+baseRadius = "12px"
+buttonRadius = "20px"
+showWidgetBorder = true
+showSidebarBorder = false
+metricValueFontSize = "1.75rem"
+metricValueFontWeight = 500
+
+[theme.light]
+primaryColor = "#00687A"
+backgroundColor = "#F5FAFC"
+secondaryBackgroundColor = "#E9EFF1"
+textColor = "#171C1F"
+linkColor = "#00687A"
+borderColor = "#BFC8CB"
+dataframeHeaderBackgroundColor = "#E3E9EB"
+chartCategoricalColors = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
+
+[theme.light.sidebar]
+backgroundColor = "#E9EFF1"
+secondaryBackgroundColor = "#F5FAFC"
+
+[theme.dark]
+primaryColor = "#84D2E7"
+backgroundColor = "#0F1416"
+secondaryBackgroundColor = "#1B2122"
+textColor = "#DEE3E5"
+linkColor = "#84D2E7"
+borderColor = "#3F484B"
+dataframeHeaderBackgroundColor = "#252B2C"
+chartCategoricalColors = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"]
+
+[theme.dark.sidebar]
+backgroundColor = "#171D1E"
+secondaryBackgroundColor = "#0F1416"
