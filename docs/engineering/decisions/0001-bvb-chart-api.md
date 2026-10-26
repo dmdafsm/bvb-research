@@ -16,6 +16,7 @@ Use the chart API for full daily history (`bvb ingest history`), index history (
 
 - Yahoo / Stooq: incomplete or blocked; kept only as an optional validation source.
 - Buying BVB data: possible later if the tool is ever shared; not needed for personal use.
+- Since the repository is public ([ADR 0005](0005-public-repository.md)), the collector code is visible to others; the approval above covers the maintainer's own use only. Anyone running the code is responsible for complying with BVB's terms.
 - The endpoint is undocumented and may change or be restricted. The collectors fail loudly; the daily summary page remains a fallback for recent data.
 - The BVB adjusted series adjusts capital events but not cash dividends consistently, and misses some older events; `adjust.py` compensates ([architecture](../../architecture.md)).
 

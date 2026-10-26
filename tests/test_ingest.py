@@ -21,9 +21,9 @@ def con(tmp_path):
     "text, expected",
     [
         ("12.345.678,90", 12345678.9),
-        ("21,7400", 36.48),
+        ("21,7400", 21.74),
         ("-2,75", -2.75),
-        ("1.144", 1144.0),
+        ("1.234", 1234.0),
         ("", None),
         ("-", None),
     ],
@@ -33,23 +33,26 @@ def test_parse_number(text, expected):
 
 
 def test_parse_summary_fixture():
-    rows = bvb_summary.parse_summary((FIXTURES / "bvb_summary_2026-10-21.html").read_text())
-    assert len(rows) == 161
-    tlv = next(r for r in rows if r["symbol"] == "TLV")
-    assert tlv == {
-        "symbol": "TLV",
+    # fixture sintetic, cu structura paginii BVB (randul "Nu exista date" e sarit)
+    rows = bvb_summary.parse_summary((FIXTURES / "bvb_summary_synthetic.html").read_text())
+    assert [r["symbol"] for r in rows] == ["AAA", "BBB", "CCC", "DDD"]
+    assert rows[0] == {
+        "symbol": "AAA",
         "market": "REGS",
-        "trades": 1144,
+        "trades": 1234,
         "volume": 567890,
         "value": 12345678.9,
-        "open": 36.48,
-        "low": 35.94,
-        "high": 36.66,
-        "avg_price": 36.48,
-        "close": 36.6,
-        "ref_price": 36.44,
-        "change_pct": 0.44,
+        "open": 21.74,
+        "low": 21.5,
+        "high": 21.98,
+        "avg_price": 21.74,
+        "close": 21.8,
+        "ref_price": 21.6,
+        "change_pct": 0.93,
     }
+    ccc = rows[2]  # fara tranzactii: pretul de deschidere lipseste, nu e zero
+    assert (ccc["open"], ccc["close"], ccc["volume"]) == (None, 0.45, 0)
+    assert rows[1]["change_pct"] == -1.44
 
 
 def test_parse_summary_empty_and_missing_columns():
@@ -152,18 +155,32 @@ def test_last_complete_day():
 def test_issuer_parse_fixture():
     from bvb.ingest import issuer
 
-    data = issuer.parse("SNP", (FIXTURES / "issuer_SNP.html").read_text())
+    data = issuer.parse("AAA", (FIXTURES / "issuer_synthetic.html").read_text())
     inst = data["instrument"]
-    assert inst["name"] == "OMV PETROM S.A."
-    assert inst["isin"] == "RO0000AAA001"
+    assert inst["name"] == "ALFA EXEMPLU S.A."
+    assert inst["isin"] == "RO0000AAA001"  # din dvInfo, nu din tabelul de preturi
+    assert (inst["segment"], inst["category"]) == ("Principal", "Premium")
     assert inst["cui"] == "12345678"
-    assert inst["shares"] == 1250000000
-    assert inst["listing_date"] == date(2001, 9, 3)
+    assert inst["shares"] == 1_250_000_000
+    assert inst["nominal_value"] == 0.1
+    assert inst["listing_date"] == date(2005, 3, 15)
 
-    assert len(data["dividends"]) == 25
+    assert len(data["dividends"]) == 3  # randul fara suma e sarit
     d = data["dividends"][0]
-    assert (d["fiscal_year"], d["amount"], d["ex_date"]) == (2025, 0.0578, date(2026, 5, 14))
+    assert (d["fiscal_year"], d["amount"], d["ex_date"], d["pay_date"]) == (
+        2025,
+        0.095,
+        date(2026, 5, 14),
+        date(2026, 6, 5),
+    )
+    assert data["dividends"][2]["pay_date"] is None
 
-    assert len(data["capital"]) == 6
+    assert len(data["capital"]) == 2
     c = data["capital"][0]
-    assert (c["record_date"], c["shares_before"], c["shares_after"]) == (date(2022, 7, 6), 1000000000, 1250000000)
+    assert (c["record_date"], c["shares_before"], c["shares_after"]) == (date(2022, 7, 6), 1_000_000_000, 1_250_000_000)
+    assert data["capital"][1]["ref_date"] is None
+
+    holders = data["shareholders"]
+    assert holders[0]["holder"].startswith("STATUL ROMAN")
+    assert len(holders) == 3  # fara randul TOTAL
+    assert (holders[0]["as_of"], holders[0]["shares"], holders[0]["pct"]) == (date(2026, 9, 30), 650_000_000, 52.0)
