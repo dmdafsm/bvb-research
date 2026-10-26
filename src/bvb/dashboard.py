@@ -10,7 +10,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from bvb import analytics, db, portfolio, risk, valuation
+from bvb import analytics, db, learning, portfolio, risk, valuation
 from bvb.config import READ_PATH
 
 st.set_page_config(page_title="BVB Research", page_icon=":material/monitoring:", layout="wide")
@@ -653,12 +653,45 @@ def page_events():
     )
 
 
+def page_learning():
+    st.title("Invatare")
+    st.caption(
+        "Conceptele si metodologia din spatele cifrelor din dashboard. Formulele descriu calculul facut "
+        "de aplicatie, cu conventiile si limitele lui; linkurile duc la explicatii mai largi."
+    )
+    query = st.sidebar.text_input("Cauta", placeholder="ex. beta, dividend, VaR")
+    pages = st.sidebar.multiselect("Folosite pe pagina", learning.PAGES, placeholder="Toate paginile")
+    found = learning.search(query, pages)
+    if not found:
+        st.info("Niciun concept pentru cautarea aleasa.")
+        return
+    groups = learning.by_topic(found)
+    st.markdown(" · ".join(f"[{topic}](#{_anchor(topic)})" for topic in groups))
+    for topic, concepts in groups.items():
+        st.subheader(topic, anchor=_anchor(topic))
+        for c in concepts:
+            with st.expander(c.title, expanded=bool(query)):
+                st.markdown(c.summary)
+                for formula in c.formulas:
+                    st.latex(formula)
+                if c.method:
+                    st.markdown(f"**Cum se calculeaza aici.** {c.method}")
+                st.caption("Apare pe: " + ", ".join(c.pages))
+                if c.links:
+                    st.markdown("Mai mult: " + " · ".join(f"[{label}]({url})" for label, url in c.links))
+
+
+def _anchor(text: str) -> str:
+    return text.lower().replace(" ", "-")
+
+
 nav = st.navigation(
     [
         st.Page(page_stock, title="Emitent", icon=":material/apartment:", url_path="emitent", default=True),
         st.Page(page_screen, title="Screener", icon=":material/filter_list:", url_path="screener"),
         st.Page(page_portfolio, title="Portofoliu", icon=":material/pie_chart:", url_path="portofoliu"),
         st.Page(page_events, title="Calendar si anunturi", icon=":material/event:", url_path="calendar"),
+        st.Page(page_learning, title="Invatare", icon=":material/school:", url_path="invatare"),
     ]
 )
 nav.run()
