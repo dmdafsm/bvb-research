@@ -102,6 +102,17 @@ uv run bvb daily --full                           # saptamanal: + istoric grafic
 
 DuckDB permite un singur proces care scrie: oprește dashboard-ul în timpul colectărilor.
 
+## Companii delistate
+
+```bash
+uv run bvb ingest delisted        # lista BVB (cautare avansata, incl. delistate) + istoric din graficul BVB
+uv run bvb adjust                 # include si simbolurile delistate
+uv run bvb backtest "TLV,AZO" --start 2008-01-01
+```
+
+- ~5.900 de acțiuni delistate în lista BVB (majoritatea foste RASDAQ); se păstrează doar cele cu istoric pe BVB, cu `market = 'DELISTED'`. Verificarea e reluabilă (`delisted_probe`).
+- În backtest, o acțiune delistată se vinde la ultimul preț după ultima zi cu tranzacții, iar ponderea ei se redistribuie la rebalansare. Prețul de ieșire real (ofertă de preluare, faliment) poate diferi.
+
 ## Teste
 
 ```bash

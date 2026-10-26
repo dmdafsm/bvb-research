@@ -78,7 +78,8 @@ def ingest_history(
     """Istoric complet (brut + ajustat) din graficul BVB."""
     con = db.connect()
     if not symbols:
-        symbols = [r[0] for r in con.execute("SELECT symbol FROM instruments ORDER BY symbol").fetchall()]
+        symbols = [r[0] for r in con.execute(
+            "SELECT symbol FROM instruments WHERE market <> 'DELISTED' ORDER BY symbol").fetchall()]
     if not symbols:
         typer.echo("Niciun simbol. Ruleaza intai `bvb ingest bvb`.")
         raise typer.Exit(1)
@@ -107,7 +108,8 @@ def ingest_indices(
 def ingest_metadata():
     """Sector, industrie si moneda pentru toate instrumentele (API grafic BVB)."""
     con = db.connect()
-    symbols = [r[0] for r in con.execute("SELECT symbol FROM instruments ORDER BY symbol").fetchall()]
+    symbols = [r[0] for r in con.execute(
+        "SELECT symbol FROM instruments WHERE market <> 'DELISTED' ORDER BY symbol").fetchall()]
     n = bvb_history.ingest_metadata(con, symbols, log=typer.echo)
     db.log_ingest(con, "metadata", {"symbols": len(symbols)}, "ok", n)
     typer.echo(f"Total: {n}/{len(symbols)}")
@@ -160,6 +162,55 @@ def _store_issuer(con, symbol: str, html: str):
     return data, n
 
 
+@ingest_app.command("delisted")
+def ingest_delisted(
+    refresh_list: bool = typer.Option(False, help="Re-descarca lista din cautarea avansata BVB."),
+    limit: int = typer.Option(0, help="Maxim atatea simboluri verificate (0 = toate)."),
+):
+    """Actiuni delistate: lista BVB + istoric din graficul BVB (doar cele cu tranzactii pe BVB)."""
+    import time
+
+    import httpx
+
+    from bvb.config import BVB_BASE, REQUEST_DELAY, USER_AGENT
+    from bvb.ingest import delisted
+
+    con = db.connect()
+    rows = delisted.fetch_list(log=typer.echo) if refresh_list or not delisted.load_list() else delisted.load_list()
+    con.execute("CREATE TABLE IF NOT EXISTS delisted_probe (symbol VARCHAR PRIMARY KEY, checked TIMESTAMP, days INTEGER)")
+    known = {r[0] for r in con.execute("SELECT symbol FROM instruments UNION SELECT symbol FROM delisted_probe").fetchall()}
+    todo = [r for r in rows if r["symbol"] not in known and r["status"] != "Tranzactionabila"]
+    if limit:
+        todo = todo[:limit]
+    typer.echo(f"{len(rows)} actiuni in lista BVB, {len(todo)} delistate de verificat")
+    until = bvb_history.last_complete_day()
+    found = 0
+    headers = {"User-Agent": USER_AGENT, "Referer": f"{BVB_BASE}/"}
+    with httpx.Client(headers=headers, timeout=60) as client:
+        for i, r in enumerate(todo, 1):
+            sym = r["symbol"]
+            try:
+                raw = bvb_history.fetch(client, sym, adjusted=False)
+                adj = bvb_history.fetch(client, sym, adjusted=True) if raw.get("s") == "ok" else None
+            except httpx.HTTPError as e:
+                typer.echo(f"{sym}: eroare {e!r}"[:200])
+                continue
+            prices = bvb_history.parse(sym, raw, adj, until)
+            if prices:
+                bvb_history.store(con, prices)
+                con.execute("""INSERT INTO instruments (symbol, name, isin, cui, market, status, first_seen, last_seen)
+                               VALUES (?, ?, ?, ?, 'DELISTED', ?, ?, ?) ON CONFLICT (symbol) DO NOTHING""",
+                            [sym, r["issuer"] or r["name"], r["isin"], r["cui"] or None, r["status"],
+                             prices[0][0], prices[-1][0]])
+                found += 1
+            con.execute("INSERT OR REPLACE INTO delisted_probe VALUES (?, now(), ?)", [sym, len(prices)])
+            if i % 100 == 0:
+                typer.echo(f"{i}/{len(todo)} verificate, {found} cu istoric")
+            time.sleep(REQUEST_DELAY / 2)
+    db.log_ingest(con, "delisted", {"checked": len(todo)}, "ok", found)
+    typer.echo(f"Total: {found} actiuni delistate cu istoric pe BVB (din {len(todo)} verificate)")
+
+
 @ingest_app.command("issuers")
 def ingest_issuers(
     symbols: list[str] = typer.Argument(None, help="Simboluri; implicit actiunile neactualizate de --max-age zile."),
@@ -178,7 +229,7 @@ def ingest_issuers(
         return
     if not symbols:
         symbols = [r[0] for r in con.execute(
-            "SELECT symbol FROM instruments WHERE market <> 'INDEX' "
+            "SELECT symbol FROM instruments WHERE market NOT IN ('INDEX', 'DELISTED') "
             "AND (issuer_updated IS NULL OR issuer_updated < now() - to_days(?)) ORDER BY symbol",
             [max_age]).fetchall()]
     ok = 0
