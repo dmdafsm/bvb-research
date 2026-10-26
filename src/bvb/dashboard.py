@@ -13,7 +13,7 @@ import streamlit as st
 from bvb import analytics, db, portfolio, risk, valuation
 from bvb.config import READ_PATH
 
-st.set_page_config(page_title="BVB Research", layout="wide")
+st.set_page_config(page_title="BVB Research", page_icon=":material/monitoring:", layout="wide")
 
 if not READ_PATH.exists():
     st.error(
@@ -81,17 +81,28 @@ def pct(x, digits=1):
     return f"{x:.{digits}%}" if x == x and x is not None else "–"
 
 
+def ron(x) -> str:
+    """Suma scurta pentru carduri: 22.6 mld. / 2.8 mil. / 950.4 mii (ca restul cifrelor din pagina)."""
+    if x is None or x != x:
+        return "–"
+    for div, unit in ((1e9, "mld."), (1e6, "mil."), (1e3, "mii")):
+        if abs(x) >= div:
+            return f"{x / div:,.1f} {unit}"
+    return f"{x:,.0f}"
+
+
 def normalized_chart(series: dict[str, pd.Series], title: str, log: bool = False):
     fig = go.Figure()
     for name, s in series.items():
         s = s.dropna()
         if s.empty:
             continue
-        fig.add_trace(go.Scatter(x=s.index, y=s / s.iloc[0] * 100, name=name, mode="lines"))
+        fig.add_trace(go.Scatter(x=s.index, y=s / s.iloc[0] * 100, name=name, mode="lines", line=dict(width=2)))
+    st.subheader(title)
     fig.update_layout(
-        title=title,
         height=420,
-        margin=dict(l=10, r=10, t=40, b=10),
+        margin=dict(l=10, r=10, t=10, b=10),
+        hovermode="x unified",
         yaxis_type="log" if log else "linear",
         legend=dict(orientation="h"),
     )
@@ -155,11 +166,13 @@ def page_stock():
     tier = " ".join(x for x in (i["segment"], i["category"]) if x)
     st.caption(" · ".join(x for x in (i["isin"], i["market"], tier, i["activity"]) if x))
     c = st.columns(5)
-    c[0].metric("Ultimul pret", f"{i['last_close']}", help=str(i["last_date"]))
-    c[1].metric("Capitalizare", f"{i['market_cap'] / 1e6:,.0f} mil." if i["market_cap"] else "–")
-    c[2].metric("Randament dividend 12 luni", pct(i["div_yield_12m"]))
-    c[3].metric("Zile cu tranzactii (1 an)", pct(i["pct_days_traded_1y"], 0))
-    c[4].metric("Valoare medie zilnica", f"{i['adv_value_1y'] / 1e3:,.0f} mii")
+    c[0].metric("Ultimul pret", f"{i['last_close']}", help=str(i["last_date"]), border=True)
+    c[1].metric("Capitalizare", ron(i["market_cap"]) if i["market_cap"] else "–", border=True)
+    c[2].metric(
+        "Dividend 12 luni", pct(i["div_yield_12m"]), help="Randament din dividende, ultimele 12 luni", border=True
+    )
+    c[3].metric("Zile tranzactionate", pct(i["pct_days_traded_1y"], 0), help="Ultimul an", border=True)
+    c[4].metric("Rulaj mediu/zi", ron(i["adv_value_1y"]), help="Valoare medie zilnica, ultimul an (RON)", border=True)
 
     start = date.today() - timedelta(days=365 * years)
     tr = analytics.series(con, [symbol], start=start)[symbol]
@@ -215,17 +228,11 @@ def page_stock():
                 )
             hist = valuation.multiples_history(con, symbol)
             if len(hist):
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=hist.index, y=hist["pe"], name="P/E"))
-                fig.add_trace(go.Scatter(x=hist.index, y=hist["pb"], name="P/B", yaxis="y2"))
-                fig.update_layout(
-                    height=300,
-                    margin=dict(l=10, r=10, t=30, b=10),
-                    title="Multipli istorici",
-                    yaxis2=dict(overlaying="y", side="right"),
-                    legend=dict(orientation="h"),
-                )
-                st.plotly_chart(fig, use_container_width=True)
+                # cate un grafic pe multiplu: scale diferite, fara a doua axa
+                for tab, (col, name) in zip(st.tabs(["P/E", "P/B"]), [("pe", "P/E"), ("pb", "P/B")], strict=True):
+                    fig = go.Figure(go.Scatter(x=hist.index, y=hist[col], name=name, line=dict(width=2)))
+                    fig.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10), hovermode="x unified")
+                    tab.plotly_chart(fig, use_container_width=True)
     with right:
         st.subheader("Dividende")
         st.dataframe(rep["dividends"], use_container_width=True, hide_index=True)
@@ -319,19 +326,19 @@ def page_portfolio():
         st.warning(n)
     m = res.metrics
     c = st.columns(5)
-    c[0].metric("Valoare finala", f"{m['final_value']:,.0f}")
-    c[1].metric("CAGR", pct(m["cagr"]))
-    c[2].metric("Volatilitate", pct(m["volatility"]))
-    c[3].metric("Max drawdown", pct(m["max_drawdown"]))
-    c[4].metric("Sharpe", f"{m['sharpe']:.2f}")
+    c[0].metric("Valoare finala", ron(m["final_value"]), border=True)
+    c[1].metric("CAGR", pct(m["cagr"]), border=True)
+    c[2].metric("Volatilitate", pct(m["volatility"]), border=True)
+    c[3].metric("Max drawdown", pct(m["max_drawdown"]), border=True)
+    c[4].metric("Sharpe", f"{m['sharpe']:.2f}", border=True)
     st.caption(
-        f"BET-TR: valoare finala {res.benchmark.iloc[-1]:,.0f} · CAGR {pct(m['bench_cagr'])} · "
+        f"BET-TR: valoare finala {ron(res.benchmark.iloc[-1])} · CAGR {pct(m['bench_cagr'])} · "
         f"volatilitate {pct(m['bench_volatility'])} · max drawdown {pct(m['bench_max_drawdown'])}"
     )
     normalized_chart({"Portofoliu": res.nav, "BET-TR": res.benchmark}, "Backtest (baza 100)")
     st.dataframe(portfolio.yearly_returns(res).map(pct), use_container_width=True)
 
-    st.header("Risc (ultimii 3 ani)")
+    st.header(":material/shield: Risc (ultimii 3 ani)")
     try:
         r = risk.report(con, weights, value=value)
     except ValueError as e:
@@ -421,13 +428,14 @@ def page_events():
     )
 
 
-PAGES = {
-    "Emitent": page_stock,
-    "Screener": page_screen,
-    "Portofoliu": page_portfolio,
-    "Calendar si anunturi": page_events,
-}
-choice = st.sidebar.radio("Pagina", list(PAGES))
-PAGES[choice]()
+nav = st.navigation(
+    [
+        st.Page(page_stock, title="Emitent", icon=":material/apartment:", url_path="emitent", default=True),
+        st.Page(page_screen, title="Screener", icon=":material/filter_list:", url_path="screener"),
+        st.Page(page_portfolio, title="Portofoliu", icon=":material/pie_chart:", url_path="portofoliu"),
+        st.Page(page_events, title="Calendar si anunturi", icon=":material/event:", url_path="calendar"),
+    ]
+)
+nav.run()
 st.sidebar.caption(f"Date actualizate: {datetime.fromtimestamp(VERSION):%d.%m.%Y %H:%M}")
 st.sidebar.caption("Date: bvb.ro (uz personal), data.gov.ro (CC-BY 4.0). Nu reprezinta recomandari de investitii.")
