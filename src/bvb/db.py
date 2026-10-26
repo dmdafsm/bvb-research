@@ -56,6 +56,25 @@ ALTER TABLE instruments ADD COLUMN IF NOT EXISTS shares BIGINT;
 ALTER TABLE instruments ADD COLUMN IF NOT EXISTS nominal_value DOUBLE;
 ALTER TABLE instruments ADD COLUMN IF NOT EXISTS listing_date DATE;
 ALTER TABLE instruments ADD COLUMN IF NOT EXISTS issuer_updated TIMESTAMP;
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS sector VARCHAR;     -- din API-ul graficului BVB
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS industry VARCHAR;
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS currency VARCHAR;
+
+CREATE TABLE IF NOT EXISTS shareholders (
+    symbol  VARCHAR NOT NULL,
+    as_of   DATE,
+    holder  VARCHAR,
+    shares  BIGINT,
+    pct     DOUBLE                    -- procent din capital
+);
+
+-- Detinerea statului (central sau local) din structura actionariatului.
+CREATE OR REPLACE VIEW state_ownership AS
+SELECT symbol, sum(pct) AS state_pct
+FROM shareholders
+WHERE regexp_matches(upper(holder),
+      'STATUL ROMAN|MINISTERUL|SECRETARIATUL GENERAL AL GUVERNULUI|MUNICIPIUL|CONSILIUL (JUDETEAN|LOCAL)|JUDETUL ')
+GROUP BY symbol;
 
 -- Din fisa emitentului (istoric complet, inlocuit la fiecare actualizare).
 CREATE TABLE IF NOT EXISTS dividends (

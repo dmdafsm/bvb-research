@@ -52,6 +52,20 @@ uv run bvb backtest "TLV,SNP" --tax 0 --fee 0 --csv nav.csv
 - Backtest: tranzacții la închidere, comision procentual, impozit pe dividende pe cotele istorice (`--tax auto`: 16% până în 2015, 5% 2016–2022, 8% 2023–2024, 10% 2025, 16% din 2026), dividende reinvestite în aceeași acțiune (`drip`) sau păstrate cash.
 - În zilele fără tranzacții prețul e reportat: pentru acțiuni nelichide volatilitatea e subestimată și execuția e optimistă — verifică mereu coloana de lichiditate.
 
+## Risc de portofoliu
+
+```bash
+uv run bvb ingest metadata                        # sector, industrie, moneda (o data)
+uv run bvb risk "TLV=0.3,SNP=0.25,H2O=0.25,ARS=0.1,CRC=0.1" --value 200000 --horizon 1
+```
+
+- VaR/CVaR istoric (ferestre suprapuse pe orizont) și parametric (normal, covarianță Ledoit-Wolf), contribuția fiecărei poziții la risc.
+- Corelații și beta pe randamente săptămânale (atenuează efectul prețurilor reportate la acțiunile nelichide).
+- Stres: episoade istorice (2008, 2011, OUG 114/2018, COVID, Ucraina) și șocuri BET-TR prin beta; acțiunile nelistate atunci sunt aproximate prin beta (coloana `proxied`).
+- Concentrare: HHI, sectoare, companii controlate de stat (din structura acționariatului), expunere non-RON.
+- Lichiditate: zile necesare vânzării fiecărei poziții la max. 20% din valoarea medie zilnică (`--participation`).
+- VaR-ul istoric reflectă doar fereastra aleasă (`--years`); o fereastră fără crize subestimează riscul — compară cu scenariile de stres.
+
 ## Teste
 
 ```bash

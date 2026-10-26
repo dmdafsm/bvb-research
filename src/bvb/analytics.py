@@ -132,7 +132,7 @@ def metrics(values: pd.Series, bench: pd.Series | None = None, rf: float = 0.0) 
 def liquidity(con, symbols: list[str], end: date, days: int = 365) -> pd.DataFrame:
     """% zile cu tranzactii si valoarea medie zilnica (RON) pe ultimele `days` zile calendaristice."""
     start = end - timedelta(days=days)
-    n_days = len(calendar(con, start, end))
+    n_days = int((calendar(con, start, end) > pd.Timestamp(start)).sum())  # aceeasi fereastra (start, end]
     df = con.execute(f"""
         SELECT symbol,
                count(*) FILTER (WHERE volume > 0)         AS traded_days,
