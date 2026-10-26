@@ -106,6 +106,17 @@ def backtest(con, cfg: Config) -> Result:
     divs["day"] = days[np.minimum(days.searchsorted(divs["ex_date"]), len(days) - 1)]
     divs_by_day = divs.groupby("day")
 
+    # Actiunile delistate: dupa ultima zi cu tranzactii pozitia se vinde la ultimul pret,
+    # iar la rebalansari ponderea lor se redistribuie celorlalte.
+    last_trade = {s: d for s, d in con.execute(
+        f"SELECT symbol, last_seen FROM instruments WHERE market = 'DELISTED' AND symbol IN ({','.join('?' * len(symbols))})",
+        symbols).fetchall()}
+    exit_day = {s: days[days.searchsorted(pd.Timestamp(d), side="right")]
+                for s, d in last_trade.items() if pd.Timestamp(d) < days[-1]}
+    for s, d in last_trade.items():
+        notes.append(f"{s} e delistat (ultima tranzactie {d}); pozitia se lichideaza la ultimul pret.")
+    exited: set[str] = set()
+
     rebal = _rebalance_days(days, cfg.rebalance)
     shares = pd.Series(0.0, index=symbols)
     cash = cfg.capital
@@ -143,11 +154,21 @@ def backtest(con, cfg: Config) -> Result:
                     trades.append({"date": day.date(), "symbol": d.symbol, "shares": q, "price": px[d.symbol],
                                    "value": q * px[d.symbol], "fee": q * px[d.symbol] * cfg.fee})
 
+        for s, d in exit_day.items():
+            if d == day and s not in exited:
+                exited.add(s)
+                if shares[s] > 0:
+                    target_values = shares * px
+                    target_values[s] = 0.0
+                    trade_to(target_values, px, day)
+
         if i == 0 or day in rebal:
             nav = cash + (shares * px).sum()
+            tgt = target.drop(list(exited))
+            tgt = (tgt / tgt.sum()).reindex(symbols).fillna(0.0) if tgt.sum() > 0 else target * 0
             # rezervam comisionul estimat ca sa nu intram pe cash negativ
-            turnover = (target * nav - shares * px).abs().sum()
-            trade_to(target * (nav - turnover * cfg.fee), px, day)
+            turnover = (tgt * nav - shares * px).abs().sum()
+            trade_to(tgt * (nav - turnover * cfg.fee), px, day)
 
         value = (shares * px).sum()
         nav_rows.append(cash + value)

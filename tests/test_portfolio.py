@@ -78,3 +78,15 @@ def test_metrics_basic():
     idx2 = pd.DatetimeIndex(["2020-01-01", "2022-01-01"])
     assert analytics.cagr(pd.Series([100.0, 121.0], index=idx2)) == pytest.approx(0.1, abs=1e-3)
     assert np.isnan(analytics.cagr(pd.Series([100.0], index=idx[:1])))
+
+
+def test_delisted_position_is_sold_after_last_trade(con):
+    # BBB se delisteaza dupa ziua 45: pozitia trece in cash la ultimul pret.
+    last = con.execute("SELECT date FROM prices_adj WHERE symbol = 'BBB' ORDER BY date LIMIT 1 OFFSET 45").fetchone()[0]
+    con.execute("DELETE FROM prices_adj WHERE symbol = 'BBB' AND date > ?", [last])
+    con.execute("UPDATE instruments SET market = 'DELISTED', last_seen = ? WHERE symbol = 'BBB'", [last])
+    r = portfolio.backtest(con, portfolio.Config(weights={"AAA": 0.5, "BBB": 0.5}, fee=0, tax=0, rebalance="monthly"))
+    assert r.holdings["BBB"].iloc[-1] == 0
+    assert any("BBB e delistat" in n for n in r.notes)
+    sells = r.trades[(r.trades["symbol"] == "BBB") & (r.trades["value"] < 0)]
+    assert len(sells) and sells["date"].min() > last
