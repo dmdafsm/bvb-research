@@ -35,7 +35,7 @@ def test_dividend_total_return():
     prices = make_prices([10, 10, 9, 9], [10, 10, 9, 9])
     divs = pd.DataFrame({"ex_date": [date(2024, 1, 3)], "record_date": [date(2024, 1, 4)], "amount": [1.0]})
     out, diag = adjust(prices, divs, NO_CAP)
-    assert list(out["adj_close"]) == [10, 10, 9, 9]           # pretul nu se ajusteaza
+    assert list(out["adj_close"]) == [10, 10, 9, 9]  # pretul nu se ajusteaza
     assert list(out["tr_close"]) == pytest.approx([9, 9, 9, 9])  # randament total 0 pe ziua ex
     assert diag["dividends_used"].loc[0, "yield"] == pytest.approx(0.1)
 
@@ -54,14 +54,15 @@ def test_bvb_dividend_jump_not_double_counted():
 def test_estimate_ex_date_t2_and_t3():
     days = pd.bdate_range("2014-09-01", "2014-10-31")
     assert estimate_ex_date(date(2014, 10, 15), days) == date(2014, 10, 14)  # T+2: o zi inainte
-    assert estimate_ex_date(date(2014, 9, 17), days) == date(2014, 9, 15)    # T+3: doua zile inainte
+    assert estimate_ex_date(date(2014, 9, 17), days) == date(2014, 9, 15)  # T+3: doua zile inainte
 
 
 def test_capital_change_missed_by_bvb_is_derived_when_price_confirms():
     # 1 -> 2 actiuni, BVB nu a ajustat; pretul se injumatateste pe data ex.
     prices = make_prices([10, 10, 5, 5], [10, 10, 5, 5])
-    capital = pd.DataFrame({"record_date": [date(2024, 1, 4)], "change_date": [None],
-                            "shares_before": [100], "shares_after": [200]})
+    capital = pd.DataFrame(
+        {"record_date": [date(2024, 1, 4)], "change_date": [None], "shares_before": [100], "shares_after": [200]}
+    )
     out, diag = adjust(prices, NO_DIV, capital)
     assert list(diag["events"]["kind"]) == ["capital_derived"]
     assert list(out["adj_close"]) == pytest.approx([5, 5, 5, 5])
@@ -69,8 +70,9 @@ def test_capital_change_missed_by_bvb_is_derived_when_price_confirms():
 
 def test_capital_change_not_derived_without_price_confirmation():
     prices = make_prices([10, 10, 10, 10], [10, 10, 10, 10])
-    capital = pd.DataFrame({"record_date": [date(2024, 1, 4)], "change_date": [None],
-                            "shares_before": [100], "shares_after": [200]})
+    capital = pd.DataFrame(
+        {"record_date": [date(2024, 1, 4)], "change_date": [None], "shares_before": [100], "shares_after": [200]}
+    )
     out, diag = adjust(prices, NO_DIV, capital)
     assert diag["events"].empty
     assert list(out["adj_close"]) == [10, 10, 10, 10]
@@ -87,8 +89,14 @@ def test_large_special_dividend_total_return():
 def test_consolidation_after_suspension_uses_change_date():
     # Inregistrare mult inainte, tranzactionarea reia dupa data modificarii (BRD 2005).
     prices = make_prices([5, 5, 5, 10, 10], [5, 5, 5, 10, 10])
-    capital = pd.DataFrame({"record_date": [date(2023, 12, 1)], "change_date": [date(2024, 1, 4)],
-                            "shares_before": [200], "shares_after": [100]})
+    capital = pd.DataFrame(
+        {
+            "record_date": [date(2023, 12, 1)],
+            "change_date": [date(2024, 1, 4)],
+            "shares_before": [200],
+            "shares_after": [100],
+        }
+    )
     out, diag = adjust(prices, NO_DIV, capital)
     assert list(diag["events"]["kind"]) == ["capital_derived"]
     assert list(out["adj_close"]) == pytest.approx([10, 10, 10, 10, 10])

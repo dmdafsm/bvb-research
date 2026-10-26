@@ -1,6 +1,7 @@
 """Fisa emitentului de pe bvb.ro: date de baza, dividende, modificari de capital.
 
-Pagina (tab-urile Sumar si Emitent, plus structura actionariatului): /FinancialInstruments/Details/FinancialInstrumentsDetails.aspx?s=<SIMBOL>
+Pagina (tab-urile Sumar, Emitent si Stiri, plus structura actionariatului):
+/FinancialInstruments/Details/FinancialInstrumentsDetails.aspx?s=<SIMBOL>
 - tab "Sumar": ISIN, segment, categorie, numar actiuni, valoare nominala;
 - tab "Emitent": profil (CUI, domeniu), istoric dividende (`gvDividend`),
   modificari capital social (`gvMCapSoc`);
@@ -59,8 +60,11 @@ def fetch_snapshots(symbols: list[str]):
                 except Exception as e:  # o fisa lipsa nu opreste restul
                     yield symbol, None, e
                     continue
-                yield symbol, (f"<html><body>\n{summary}\n<hr id='emitent'>\n{issuer}\n"
-                               f"<hr id='stiri'>\n{news}\n</body></html>"), None
+                yield (
+                    symbol,
+                    (f"<html><body>\n{summary}\n<hr id='emitent'>\n{issuer}\n<hr id='stiri'>\n{news}\n</body></html>"),
+                    None,
+                )
                 time.sleep(REQUEST_DELAY)
         finally:
             browser.close()
@@ -133,33 +137,37 @@ def parse(symbol: str, html: str) -> dict:
     for cells in _rows(tree, "gvDividend"):
         if len(cells) < 7 or not cells[1]:
             continue
-        dividends.append({
-            "symbol": symbol,
-            "fiscal_year": int(cells[0]) if cells[0].isdigit() else None,
-            "amount": parse_number(cells[1]),
-            "agm_date": _date(cells[2]),
-            "record_date": _date(cells[3]),
-            "ex_date": _date(cells[4]),
-            "declared_date": _date(cells[5]),
-            "pay_date": _date(cells[6]),
-        })
+        dividends.append(
+            {
+                "symbol": symbol,
+                "fiscal_year": int(cells[0]) if cells[0].isdigit() else None,
+                "amount": parse_number(cells[1]),
+                "agm_date": _date(cells[2]),
+                "record_date": _date(cells[3]),
+                "ex_date": _date(cells[4]),
+                "declared_date": _date(cells[5]),
+                "pay_date": _date(cells[6]),
+            }
+        )
 
     capital = []
     for cells in _rows(tree, "gvMCapSoc"):
         if len(cells) < 9:
             continue
-        capital.append({
-            "symbol": symbol,
-            "change_date": _date(cells[0]),
-            "agm_date": _date(cells[1]),
-            "ref_date": _date(cells[2]),
-            "record_date": _date(cells[3]),
-            "operation": cells[4],
-            "shares_before": int(parse_number(cells[5])) if cells[5] else None,
-            "shares_after": int(parse_number(cells[6])) if cells[6] else None,
-            "nominal_before": parse_number(cells[7]) if cells[7] else None,
-            "nominal_after": parse_number(cells[8]) if cells[8] else None,
-        })
+        capital.append(
+            {
+                "symbol": symbol,
+                "change_date": _date(cells[0]),
+                "agm_date": _date(cells[1]),
+                "ref_date": _date(cells[2]),
+                "record_date": _date(cells[3]),
+                "operation": cells[4],
+                "shares_before": int(parse_number(cells[5])) if cells[5] else None,
+                "shares_after": int(parse_number(cells[6])) if cells[6] else None,
+                "nominal_before": parse_number(cells[7]) if cells[7] else None,
+                "nominal_after": parse_number(cells[8]) if cells[8] else None,
+            }
+        )
     shareholders = []
     holders = tree.css_first("table#gvStructuraActionari")
     detail = holders.css_first("table#gvDetails") if holders is not None else None
@@ -170,22 +178,49 @@ def parse(symbol: str, html: str) -> dict:
             cells = [td.text(strip=True) for td in tr.css("td")]
             if len(cells) < 3 or cells[0].upper() == "TOTAL":
                 continue
-            shareholders.append({
-                "symbol": symbol,
-                "as_of": as_of,
-                "holder": cells[0],
-                "shares": int(parse_number(cells[1])) if cells[1] else None,
-                "pct": parse_number(cells[2].replace("%", "")),
-            })
+            shareholders.append(
+                {
+                    "symbol": symbol,
+                    "as_of": as_of,
+                    "holder": cells[0],
+                    "shares": int(parse_number(cells[1])) if cells[1] else None,
+                    "pct": parse_number(cells[2].replace("%", "")),
+                }
+            )
     return {"instrument": instrument, "dividends": dividends, "capital": capital, "shareholders": shareholders}
 
 
-INSTRUMENT_FIELDS = ["name", "isin", "segment", "category", "status", "cui", "activity", "website",
-                     "shares", "nominal_value", "listing_date"]
+INSTRUMENT_FIELDS = [
+    "name",
+    "isin",
+    "segment",
+    "category",
+    "status",
+    "cui",
+    "activity",
+    "website",
+    "shares",
+    "nominal_value",
+    "listing_date",
+]
 DIVIDEND_FIELDS = ["symbol", "fiscal_year", "amount", "agm_date", "record_date", "ex_date", "declared_date", "pay_date"]
 SHAREHOLDER_FIELDS = ["symbol", "as_of", "holder", "shares", "pct"]
-CAPITAL_FIELDS = ["symbol", "change_date", "agm_date", "ref_date", "record_date", "operation",
-                  "shares_before", "shares_after", "nominal_before", "nominal_after"]
+CAPITAL_FIELDS = [
+    "symbol",
+    "change_date",
+    "agm_date",
+    "ref_date",
+    "record_date",
+    "operation",
+    "shares_before",
+    "shares_after",
+    "nominal_before",
+    "nominal_after",
+]
+
+
+def _insert_sql(table: str, fields: list[str]) -> str:
+    return f"INSERT INTO {table} ({', '.join(fields)}) VALUES ({', '.join('?' * len(fields))})"
 
 
 def store(con, data: dict) -> None:
@@ -202,16 +237,16 @@ def store(con, data: dict) -> None:
     con.execute("DELETE FROM shareholders WHERE symbol = ?", [symbol])
     if data["shareholders"]:
         con.executemany(
-            f"INSERT INTO shareholders ({', '.join(SHAREHOLDER_FIELDS)}) VALUES ({', '.join('?' * len(SHAREHOLDER_FIELDS))})",
+            _insert_sql("shareholders", SHAREHOLDER_FIELDS),
             [[h[f] for f in SHAREHOLDER_FIELDS] for h in data["shareholders"]],
         )
     if data["dividends"]:
         con.executemany(
-            f"INSERT INTO dividends ({', '.join(DIVIDEND_FIELDS)}) VALUES ({', '.join('?' * len(DIVIDEND_FIELDS))})",
+            _insert_sql("dividends", DIVIDEND_FIELDS),
             [[d[f] for f in DIVIDEND_FIELDS] for d in data["dividends"]],
         )
     if data["capital"]:
         con.executemany(
-            f"INSERT INTO capital_changes ({', '.join(CAPITAL_FIELDS)}) VALUES ({', '.join('?' * len(CAPITAL_FIELDS))})",
+            _insert_sql("capital_changes", CAPITAL_FIELDS),
             [[c[f] for f in CAPITAL_FIELDS] for c in data["capital"]],
         )

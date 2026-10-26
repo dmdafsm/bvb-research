@@ -20,14 +20,18 @@ def init_db():
 @ingest_app.command("bvb")
 def ingest_bvb(
     days: int = typer.Option(30, help="Cate sedinte inapoi (BVB ofera maxim ~30 de zile)."),
-    full: bool = typer.Option(False, help="Parcurge toata fereastra si umple golurile (nu se opreste la prima zi existenta)."),
+    full: bool = typer.Option(
+        False, help="Parcurge toata fereastra si umple golurile (nu se opreste la prima zi existenta)."
+    ),
     refresh: bool = typer.Option(False, help="Re-descarca si zilele deja existente."),
 ):
     """Preturi EOD din sumarul zilnic BVB (toate actiunile)."""
     con = db.connect()
-    have = set() if refresh else {
-        r[0] for r in con.execute("SELECT DISTINCT date FROM prices_eod WHERE source = 'bvb'").fetchall()
-    }
+    have = (
+        set()
+        if refresh
+        else {r[0] for r in con.execute("SELECT DISTINCT date FROM prices_eod WHERE source = 'bvb'").fetchall()}
+    )
     total, sessions = 0, 0
     try:
         for day, html in bvb_summary.fetch_sessions(days, known=have, walk_known=full):
@@ -60,8 +64,12 @@ def ingest_yahoo(
         if retry_missing:
             tried.append("yahoo = ''")
         where.append("(" + " OR ".join(["yahoo IS NULL", *tried]) + ")")
-        symbols = [r[0] for r in con.execute(
-            f"SELECT symbol FROM instruments WHERE {' AND '.join(where)} ORDER BY symbol").fetchall()]
+        symbols = [
+            r[0]
+            for r in con.execute(
+                f"SELECT symbol FROM instruments WHERE {' AND '.join(where)} ORDER BY symbol"
+            ).fetchall()
+        ]
     if not symbols:
         typer.echo("Niciun simbol. Ruleaza intai `bvb ingest bvb`.")
         raise typer.Exit(1)
@@ -78,8 +86,10 @@ def ingest_history(
     """Istoric complet (brut + ajustat) din graficul BVB."""
     con = db.connect()
     if not symbols:
-        symbols = [r[0] for r in con.execute(
-            "SELECT symbol FROM instruments WHERE market <> 'DELISTED' ORDER BY symbol").fetchall()]
+        symbols = [
+            r[0]
+            for r in con.execute("SELECT symbol FROM instruments WHERE market <> 'DELISTED' ORDER BY symbol").fetchall()
+        ]
     if not symbols:
         typer.echo("Niciun simbol. Ruleaza intai `bvb ingest bvb`.")
         raise typer.Exit(1)
@@ -97,7 +107,8 @@ def ingest_indices(
     con = db.connect()
     indices = indices or bvb_history.INDICES
     con.executemany(
-        "INSERT INTO instruments (symbol, market) VALUES (?, 'INDEX') ON CONFLICT (symbol) DO UPDATE SET market = 'INDEX'",
+        "INSERT INTO instruments (symbol, market) VALUES (?, 'INDEX') "
+        "ON CONFLICT (symbol) DO UPDATE SET market = 'INDEX'",
         [[i] for i in indices],
     )
     counts = bvb_history.ingest(con, indices, log=typer.echo)
@@ -108,8 +119,10 @@ def ingest_indices(
 def ingest_metadata():
     """Sector, industrie si moneda pentru toate instrumentele (API grafic BVB)."""
     con = db.connect()
-    symbols = [r[0] for r in con.execute(
-        "SELECT symbol FROM instruments WHERE market <> 'DELISTED' ORDER BY symbol").fetchall()]
+    symbols = [
+        r[0]
+        for r in con.execute("SELECT symbol FROM instruments WHERE market <> 'DELISTED' ORDER BY symbol").fetchall()
+    ]
     n = bvb_history.ingest_metadata(con, symbols, log=typer.echo)
     db.log_ingest(con, "metadata", {"symbols": len(symbols)}, "ok", n)
     typer.echo(f"Total: {n}/{len(symbols)}")
@@ -128,7 +141,8 @@ def ingest_fundamentals(
     con = db.connect()
     by_cui = {}
     for sym, cui in con.execute(
-            "SELECT symbol, cui FROM instruments WHERE cui IS NOT NULL AND market <> 'INDEX'").fetchall():
+        "SELECT symbol, cui FROM instruments WHERE cui IS NOT NULL AND market <> 'INDEX'"
+    ).fetchall():
         by_cui.setdefault(cui.strip().upper().removeprefix("RO"), []).append(sym)
     y0, y1 = (int(x) for x in years.split("-"))
     kinds = {k for k, _ in datagov.KINDS} - (set() if uu else {"UU"})
@@ -144,10 +158,26 @@ def ingest_fundamentals(
                 for sym in by_cui[r["cui"]]:
                     con.execute(
                         "INSERT OR REPLACE INTO fundamentals VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        [sym, year, r["kind"], r["cui"], r["caen"], r["revenue"], r["total_revenue"],
-                         r["net_profit"], r["equity"], r["total_assets"], r["debts"], r["cash"], r["employees"]])
-                    con.executemany("INSERT INTO fundamentals_raw VALUES (?, ?, ?, ?, ?)",
-                                    [[sym, year, r["kind"], k, v] for k, v in r["values"].items() if v is not None])
+                        [
+                            sym,
+                            year,
+                            r["kind"],
+                            r["cui"],
+                            r["caen"],
+                            r["revenue"],
+                            r["total_revenue"],
+                            r["net_profit"],
+                            r["equity"],
+                            r["total_assets"],
+                            r["debts"],
+                            r["cash"],
+                            r["employees"],
+                        ],
+                    )
+                    con.executemany(
+                        "INSERT INTO fundamentals_raw VALUES (?, ?, ?, ?, ?)",
+                        [[sym, year, r["kind"], k, v] for k, v in r["values"].items() if v is not None],
+                    )
                     total += 1
     db.log_ingest(con, "fundamentals", {"years": years, "uu": uu}, "ok", total)
     typer.echo(f"Total: {total} randuri emitent-an")
@@ -177,8 +207,12 @@ def ingest_delisted(
 
     con = db.connect()
     rows = delisted.fetch_list(log=typer.echo) if refresh_list or not delisted.load_list() else delisted.load_list()
-    con.execute("CREATE TABLE IF NOT EXISTS delisted_probe (symbol VARCHAR PRIMARY KEY, checked TIMESTAMP, days INTEGER)")
-    known = {r[0] for r in con.execute("SELECT symbol FROM instruments UNION SELECT symbol FROM delisted_probe").fetchall()}
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS delisted_probe (symbol VARCHAR PRIMARY KEY, checked TIMESTAMP, days INTEGER)"
+    )
+    known = {
+        r[0] for r in con.execute("SELECT symbol FROM instruments UNION SELECT symbol FROM delisted_probe").fetchall()
+    }
     todo = [r for r in rows if r["symbol"] not in known and r["status"] != "Tranzactionabila"]
     if limit:
         todo = todo[:limit]
@@ -198,10 +232,19 @@ def ingest_delisted(
             prices = bvb_history.parse(sym, raw, adj, until)
             if prices:
                 bvb_history.store(con, prices)
-                con.execute("""INSERT INTO instruments (symbol, name, isin, cui, market, status, first_seen, last_seen)
+                con.execute(
+                    """INSERT INTO instruments (symbol, name, isin, cui, market, status, first_seen, last_seen)
                                VALUES (?, ?, ?, ?, 'DELISTED', ?, ?, ?) ON CONFLICT (symbol) DO NOTHING""",
-                            [sym, r["issuer"] or r["name"], r["isin"], r["cui"] or None, r["status"],
-                             prices[0][0], prices[-1][0]])
+                    [
+                        sym,
+                        r["issuer"] or r["name"],
+                        r["isin"],
+                        r["cui"] or None,
+                        r["status"],
+                        prices[0][0],
+                        prices[-1][0],
+                    ],
+                )
                 found += 1
             con.execute("INSERT OR REPLACE INTO delisted_probe VALUES (?, now(), ?)", [sym, len(prices)])
             if i % 100 == 0:
@@ -228,10 +271,14 @@ def ingest_issuers(
         typer.echo(f"Re-parsate {len(files)} fise")
         return
     if not symbols:
-        symbols = [r[0] for r in con.execute(
-            "SELECT symbol FROM instruments WHERE market NOT IN ('INDEX', 'DELISTED') "
-            "AND (issuer_updated IS NULL OR issuer_updated < now() - to_days(?)) ORDER BY symbol",
-            [max_age]).fetchall()]
+        symbols = [
+            r[0]
+            for r in con.execute(
+                "SELECT symbol FROM instruments WHERE market NOT IN ('INDEX', 'DELISTED') "
+                "AND (issuer_updated IS NULL OR issuer_updated < now() - to_days(?)) ORDER BY symbol",
+                [max_age],
+            ).fetchall()
+        ]
     ok = 0
     for symbol, html, err in issuer.fetch_snapshots(symbols):
         if err is not None:
@@ -240,8 +287,10 @@ def ingest_issuers(
         issuer.save_raw(symbol, html)
         data, n_reports = _store_issuer(con, symbol, html)
         ok += 1
-        typer.echo(f"{symbol}: {len(data['dividends'])} dividende, {len(data['capital'])} modificari capital, "
-                   f"{n_reports} rapoarte")
+        typer.echo(
+            f"{symbol}: {len(data['dividends'])} dividende, {len(data['capital'])} modificari capital, "
+            f"{n_reports} rapoarte"
+        )
     db.log_ingest(con, "issuers", {"symbols": len(symbols)}, "ok", ok)
     typer.echo(f"Total: {ok}/{len(symbols)} fise")
 
@@ -254,19 +303,33 @@ def adjust_cmd(
     """Calculeaza preturile ajustate (capital + dividende) in `prices_adj`."""
     con = db.connect()
     if not symbols:
-        symbols = [r[0] for r in con.execute(
-            "SELECT symbol FROM instruments WHERE market <> 'INDEX' ORDER BY symbol").fetchall()]
+        symbols = [
+            r[0]
+            for r in con.execute("SELECT symbol FROM instruments WHERE market <> 'INDEX' ORDER BY symbol").fetchall()
+        ]
     summary = adjust.run(con, symbols)
     db.log_ingest(con, "adjust", {"symbols": len(symbols)}, "ok", int(summary["days"].sum()) if len(summary) else 0)
     if len(summary):
         summary = summary.sort_values(["suspicious", "unknown", "max_div_yield"], ascending=False)
         typer.echo(summary.head(show).to_string(index=False))
-        typer.echo(f"\n{len(summary)} simboluri; evenimente necunoscute: {summary['unknown'].sum()}, "
-                   f"miscari suspecte: {summary['suspicious'].sum()}, dividende sarite: {summary['div_skipped'].sum()}")
+        typer.echo(
+            f"\n{len(summary)} simboluri; evenimente necunoscute: {summary['unknown'].sum()}, "
+            f"miscari suspecte: {summary['suspicious'].sum()}, dividende sarite: {summary['div_skipped'].sum()}"
+        )
 
 
-PCT = {"cagr", "price_cagr", "bench_cagr", "volatility", "max_drawdown", "tracking_error",
-       "div_yield", "pct_days_traded", "div_yield_12m", "pct_days_traded_1y"}
+PCT = {
+    "cagr",
+    "price_cagr",
+    "bench_cagr",
+    "volatility",
+    "max_drawdown",
+    "tracking_error",
+    "div_yield",
+    "pct_days_traded",
+    "div_yield_12m",
+    "pct_days_traded_1y",
+}
 
 
 def _fmt(df):
@@ -292,13 +355,32 @@ def stock(
     typer.echo(f"{symbol.upper()} — {i['name']} ({i['isin']}, {i['market']}, {i['segment']} {i['category']})")
     typer.echo(f"Activitate: {i['activity']}")
     cap = f"{i['market_cap'] / 1e6:,.0f} mil. RON" if i["market_cap"] else "n/a"
-    typer.echo(f"Ultimul pret: {i['last_close']} ({i['last_date']}), capitalizare {cap}, "
-               f"randament dividend 12 luni {i['div_yield_12m']:.1%}")
-    typer.echo(f"Lichiditate 1 an: tranzactii in {i['pct_days_traded_1y']:.0%} din zile, "
-               f"valoare medie zilnica {i['adv_value_1y']:,.0f} RON\n")
+    typer.echo(
+        f"Ultimul pret: {i['last_close']} ({i['last_date']}), capitalizare {cap}, "
+        f"randament dividend 12 luni {i['div_yield_12m']:.1%}"
+    )
+    typer.echo(
+        f"Lichiditate 1 an: tranzactii in {i['pct_days_traded_1y']:.0%} din zile, "
+        f"valoare medie zilnica {i['adv_value_1y']:,.0f} RON\n"
+    )
     w = r["windows"].T.infer_objects()
-    w = w[["cagr", "price_cagr", "bench_cagr", "volatility", "sharpe", "sortino", "max_drawdown",
-           "dd_peak", "dd_trough", "beta", "corr", "tracking_error", "info_ratio"]]
+    w = w[
+        [
+            "cagr",
+            "price_cagr",
+            "bench_cagr",
+            "volatility",
+            "sharpe",
+            "sortino",
+            "max_drawdown",
+            "dd_peak",
+            "dd_trough",
+            "beta",
+            "corr",
+            "tracking_error",
+            "info_ratio",
+        ]
+    ]
     typer.echo("Randament total (dividende brute reinvestite) vs BET-TR:")
     for col in ("sharpe", "sortino", "beta", "corr", "info_ratio"):
         w[col] = w[col].astype(float)
@@ -348,14 +430,20 @@ def backtest(
         weights=portfolio.parse_weights(weights),
         start=_date.fromisoformat(start) if start else None,
         end=_date.fromisoformat(end) if end else None,
-        capital=capital, rebalance=rebalance, fee=fee,
-        tax=tax if tax == "auto" else float(tax), dividends=dividends, rf=rf,
+        capital=capital,
+        rebalance=rebalance,
+        fee=fee,
+        tax=tax if tax == "auto" else float(tax),
+        dividends=dividends,
+        rf=rf,
     )
     r = portfolio.backtest(db.connect(), cfg)
     m = r.metrics
     typer.echo(f"Portofoliu: {', '.join(f'{s} {w:.0%}' for s, w in cfg.weights.items())}")
-    typer.echo(f"Perioada: {r.nav.index[0].date()} – {r.nav.index[-1].date()}, rebalansare {rebalance}, "
-               f"comision {fee:.2%}, impozit dividende {tax}, dividende {dividends}")
+    typer.echo(
+        f"Perioada: {r.nav.index[0].date()} – {r.nav.index[-1].date()}, rebalansare {rebalance}, "
+        f"comision {fee:.2%}, impozit dividende {tax}, dividende {dividends}"
+    )
     for n in r.notes:
         typer.echo(f"  ! {n}")
     typer.echo("")
@@ -363,7 +451,11 @@ def backtest(
         ("Valoare finala", f"{m['final_value']:,.0f}", f"{r.benchmark.iloc[-1]:,.0f}"),
         ("CAGR", f"{m['cagr']:.2%}", f"{m['bench_cagr']:.2%}"),
         ("Volatilitate", f"{m['volatility']:.2%}", f"{m['bench_volatility']:.2%}"),
-        ("Max drawdown", f"{m['max_drawdown']:.2%} ({m['dd_peak']} → {m['dd_trough']})", f"{m['bench_max_drawdown']:.2%}"),
+        (
+            "Max drawdown",
+            f"{m['max_drawdown']:.2%} ({m['dd_peak']} → {m['dd_trough']})",
+            f"{m['bench_max_drawdown']:.2%}",
+        ),
         ("Sharpe / Sortino", f"{m['sharpe']:.2f} / {m['sortino']:.2f}", ""),
         ("Beta / corelatie", f"{m['beta']:.2f} / {m['corr']:.2f}", ""),
         ("Tracking error / IR", f"{m['tracking_error']:.2%} / {m['info_ratio']:.2f}", ""),
@@ -399,11 +491,20 @@ def risk(
     from bvb import risk as risk_mod
 
     w = portfolio.parse_weights(weights)
-    r = risk_mod.report(db.connect(), w, value=value, years=years, horizon=horizon, participation=participation,
-                        end=_date.fromisoformat(end) if end else None)
+    r = risk_mod.report(
+        db.connect(),
+        w,
+        value=value,
+        years=years,
+        horizon=horizon,
+        participation=participation,
+        end=_date.fromisoformat(end) if end else None,
+    )
     c = r.concentration
-    typer.echo(f"Portofoliu {value:,.0f} RON, estimare {r.window[0]} – {r.window[1]}, "
-               f"volatilitate anuala {c['portfolio_vol']:.1%}, shrinkage covarianta {r.shrinkage:.2f}")
+    typer.echo(
+        f"Portofoliu {value:,.0f} RON, estimare {r.window[0]} – {r.window[1]}, "
+        f"volatilitate anuala {c['portfolio_vol']:.1%}, shrinkage covarianta {r.shrinkage:.2f}"
+    )
     for n in r.notes:
         typer.echo(f"  ! {n}")
 
@@ -434,14 +535,20 @@ def risk(
     typer.echo(s.fillna("").to_string(index=False))
 
     typer.echo("\nConcentrare:")
-    typer.echo(f"  HHI {c['hhi']:.3f} (echivalent {c['effective_n']:.1f} pozitii egale), "
-               f"cea mai mare pozitie {c['top1']:.0%}, top 3 {c['top3']:.0%}")
+    typer.echo(
+        f"  HHI {c['hhi']:.3f} (echivalent {c['effective_n']:.1f} pozitii egale), "
+        f"cea mai mare pozitie {c['top1']:.0%}, top 3 {c['top3']:.0%}"
+    )
     typer.echo("  Pe sectoare: " + ", ".join(f"{k} {v:.0%}" for k, v in r.by_sector.items()))
-    typer.echo(f"  Companii controlate de stat (>= 50%): {c['state_controlled']:.0%}, "
-               f"cu orice participatie de stat: {c['state_any']:.0%}; in alte monede decat RON: {c['non_ron']:.0%}")
-    typer.echo(f"\nLichiditate (max {participation:.0%} din valoarea medie zilnica, ultimele 6 luni): "
-               f"vandabil in 1 zi {c['liquidatable_1d']:.0%}, 5 zile {c['liquidatable_5d']:.0%}, "
-               f"20 zile {c['liquidatable_20d']:.0%}")
+    typer.echo(
+        f"  Companii controlate de stat (>= 50%): {c['state_controlled']:.0%}, "
+        f"cu orice participatie de stat: {c['state_any']:.0%}; in alte monede decat RON: {c['non_ron']:.0%}"
+    )
+    typer.echo(
+        f"\nLichiditate (max {participation:.0%} din valoarea medie zilnica, ultimele 6 luni): "
+        f"vandabil in 1 zi {c['liquidatable_1d']:.0%}, 5 zile {c['liquidatable_5d']:.0%}, "
+        f"20 zile {c['liquidatable_20d']:.0%}"
+    )
 
 
 FUND_PCT = {"net_margin", "roe", "roa", "revenue_growth", "profit_growth", "payout", "pe_pctile_10y", "pb_pctile_10y"}
@@ -474,11 +581,15 @@ def fundamentals(
     m = valuation.current_multiples(con, [sym])
     if len(m):
         r = m.iloc[0]
-        typer.echo(f"\nCapitalizare {r['mcap_mn']:,.0f} mil. RON; pe exercitiul {r['fiscal_year']}: "
-                   f"P/E {r['pe']:.1f}, P/B {r['pb']:.2f}, P/S {r['ps']:.2f}")
+        typer.echo(
+            f"\nCapitalizare {r['mcap_mn']:,.0f} mil. RON; pe exercitiul {r['fiscal_year']}: "
+            f"P/E {r['pe']:.1f}, P/B {r['pb']:.2f}, P/S {r['ps']:.2f}"
+        )
         if r["pe_pctile_10y"] == r["pe_pctile_10y"]:
-            typer.echo(f"Fata de ultimii 10 ani: P/E mai mare decat in {r['pe_pctile_10y']:.0%} din luni, "
-                       f"P/B mai mare decat in {r['pb_pctile_10y']:.0%} din luni")
+            typer.echo(
+                f"Fata de ultimii 10 ani: P/E mai mare decat in {r['pe_pctile_10y']:.0%} din luni, "
+                f"P/B mai mare decat in {r['pb_pctile_10y']:.0%} din luni"
+            )
 
 
 @app.command()
@@ -495,9 +606,13 @@ def valuation(
     from bvb import valuation as val
 
     con = db.connect()
-    symbols = [r[0] for r in con.execute(
-        "SELECT DISTINCT f.symbol FROM fundamentals f JOIN instruments i USING (symbol) WHERE i.market = ?",
-        [market]).fetchall()]
+    symbols = [
+        r[0]
+        for r in con.execute(
+            "SELECT DISTINCT f.symbol FROM fundamentals f JOIN instruments i USING (symbol) WHERE i.market = ?",
+            [market],
+        ).fetchall()
+    ]
     df = val.current_multiples(con, symbols)
     liq = analytics.liquidity(con, list(df.index), _date.today())
     df = df[liq["pct_days_traded"].fillna(0) >= min_traded]
@@ -533,8 +648,9 @@ def ingest_news():
     from bvb.ingest import news as news_mod
 
     con = db.connect()
-    match = news_mod.build_matcher(con.execute(
-        "SELECT symbol, name FROM instruments WHERE market <> 'INDEX'").fetchall())
+    match = news_mod.build_matcher(
+        con.execute("SELECT symbol, name FROM instruments WHERE market <> 'INDEX'").fetchall()
+    )
     items = news_mod.fetch()
     n = news_mod.store(con, items, match)
     tagged = sum(1 for it in items if match(f"{it['title']} {it['summary']}"))
@@ -558,12 +674,16 @@ def ingest_report_texts(
 
     con = db.connect()
     where = "" if all_symbols else "AND symbol IN (SELECT symbol FROM watchlist)"
-    todo = con.execute(f"""SELECT symbol, published, title, url_ro FROM reports
+    todo = con.execute(
+        f"""SELECT symbol, published, title, url_ro FROM reports
         WHERE text IS NULL AND url_ro IS NOT NULL AND published > now() - to_days(?) {where}
-        ORDER BY published DESC""", [days]).fetchall()
+        ORDER BY published DESC""",
+        [days],
+    ).fetchall()
     ok = 0
-    with httpx.Client(headers={"User-Agent": USER_AGENT, "Referer": "https://bvb.ro/"}, timeout=60,
-                      follow_redirects=True) as client:
+    with httpx.Client(
+        headers={"User-Agent": USER_AGENT, "Referer": "https://bvb.ro/"}, timeout=60, follow_redirects=True
+    ) as client:
         for symbol, published, title, url in todo:
             try:
                 r = client.get(url)
@@ -572,8 +692,10 @@ def ingest_report_texts(
             except Exception as e:
                 typer.echo(f"{symbol} {published:%Y-%m-%d} {title[:50]}: eroare {e!r}"[:200])
                 continue
-            con.execute("UPDATE reports SET text = ? WHERE symbol = ? AND published = ? AND title = ?",
-                        [text, symbol, published, title])
+            con.execute(
+                "UPDATE reports SET text = ? WHERE symbol = ? AND published = ? AND title = ?",
+                [text, symbol, published, title],
+            )
             ok += 1
             time.sleep(REQUEST_DELAY / 2)
     typer.echo(f"Text extras din {ok}/{len(todo)} rapoarte")
@@ -622,7 +744,10 @@ def reports_cmd(
 ):
     """Rapoartele curente recente, filtrate."""
     where, params = _symbols_filter(symbols, watchlist)
-    sql = f"SELECT published, symbol, category, title, url_ro FROM reports WHERE {where} AND published > now() - to_days(?)"
+    sql = (
+        "SELECT published, symbol, category, title, url_ro FROM reports "
+        f"WHERE {where} AND published > now() - to_days(?)"
+    )
     params.append(days)
     if category:
         sql += " AND category = ?"
@@ -630,7 +755,7 @@ def reports_cmd(
     if search:
         sql += " AND (title ILIKE ? OR text ILIKE ?)"
         params += [f"%{search}%"] * 2
-    df = db.connect().execute(sql + " ORDER BY published DESC LIMIT ?", params + [limit]).df()
+    df = db.connect().execute(sql + " ORDER BY published DESC LIMIT ?", [*params, limit]).df()
     df["title"] = df["title"].str.slice(0, 80)
     typer.echo(df.to_string(index=False) if len(df) else "Niciun raport.")
 
@@ -643,14 +768,22 @@ def calendar_cmd(
 ):
     """Evenimente viitoare: rezultate, AGA, date ex-dividend."""
     where, params = _symbols_filter(symbols, watchlist)
-    df = db.connect().execute(f"""
+    df = (
+        db.connect()
+        .execute(
+            f"""
         SELECT date, symbol, kind, event FROM calendar
         WHERE {where} AND date >= current_date AND date <= current_date + to_days(?)
         UNION ALL
-        SELECT ex_date, symbol, 'ex-dividend', 'Dividend ' || amount || ' RON, plata ' || coalesce(pay_date::VARCHAR, '?')
+        SELECT ex_date, symbol, 'ex-dividend',
+               'Dividend ' || amount || ' RON, plata ' || coalesce(pay_date::VARCHAR, '?')
         FROM dividends WHERE {where} AND ex_date >= current_date AND ex_date <= current_date + to_days(?)
         ORDER BY 1, 2
-    """, params + [days] + params + [days]).df()
+    """,
+            [*params, days, *params, days],
+        )
+        .df()
+    )
     typer.echo(df.to_string(index=False) if len(df) else "Niciun eveniment.")
 
 
@@ -667,8 +800,15 @@ def news_cmd(
         cond, params = "list_has_any(symbols, (SELECT list(symbol) FROM watchlist))", []
     else:
         cond, params = "len(symbols) > 0", []
-    df = db.connect().execute(f"""SELECT published, source, array_to_string(symbols, ',') AS symbols, title, url
-        FROM news WHERE {cond} AND published > now() - to_days(?) ORDER BY published DESC""", params + [days]).df()
+    df = (
+        db.connect()
+        .execute(
+            f"""SELECT published, source, array_to_string(symbols, ',') AS symbols, title, url
+        FROM news WHERE {cond} AND published > now() - to_days(?) ORDER BY published DESC""",
+            [*params, days],
+        )
+        .df()
+    )
     df["title"] = df["title"].str.slice(0, 90)
     typer.echo(df.to_string(index=False) if len(df) else "Nicio stire.")
 
@@ -693,16 +833,22 @@ def daily(
     notify: bool = typer.Option(False, help="Notificare macOS cu alertele."),
 ):
     """Rularea zilnica (dupa 18:30): preturi, anunturi, stiri, ajustari, alerte."""
-    steps = [("Preturi BVB", lambda: ingest_bvb(days=30, full=False, refresh=False)),
-             ("Rapoarte curente", lambda: ingest_reports(windows=1)),
-             ("Stiri", ingest_news)]
+    steps = [
+        ("Preturi BVB", lambda: ingest_bvb(days=30, full=False, refresh=False)),
+        ("Rapoarte curente", lambda: ingest_reports(windows=1)),
+        ("Stiri", ingest_news),
+    ]
     if full:
-        steps += [("Istoric grafic", lambda: ingest_history(symbols=None)),
-                  ("Indici", lambda: ingest_indices(indices=None)),
-                  ("Fise emitenti", lambda: ingest_issuers(symbols=None, max_age=6, from_raw=False))]
-    steps += [("Ajustari", lambda: adjust_cmd(symbols=None, show=0)),
-              ("Texte rapoarte (lista de urmarire)", lambda: ingest_report_texts(days=30, all_symbols=False)),
-              ("Alerte", lambda: alerts(notify=notify, move=0.05))]
+        steps += [
+            ("Istoric grafic", lambda: ingest_history(symbols=None)),
+            ("Indici", lambda: ingest_indices(indices=None)),
+            ("Fise emitenti", lambda: ingest_issuers(symbols=None, max_age=6, from_raw=False)),
+        ]
+    steps += [
+        ("Ajustari", lambda: adjust_cmd(symbols=None, show=0)),
+        ("Texte rapoarte (lista de urmarire)", lambda: ingest_report_texts(days=30, all_symbols=False)),
+        ("Alerte", lambda: alerts(notify=notify, move=0.05)),
+    ]
     failed = []
     for name, step in steps:
         typer.echo(f"\n== {name}")
@@ -731,9 +877,24 @@ def dashboard(port: int = typer.Option(8501)):
     from pathlib import Path
 
     path = Path(__file__).with_name("dashboard.py")
-    subprocess.run([sys.executable, "-m", "streamlit", "run", str(path), "--server.port", str(port),
-                    "--server.address", "127.0.0.1",  # doar local: datele BVB sunt pentru uz personal
-                    "--server.headless", "true", "--browser.gatherUsageStats", "false"], check=False)
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "streamlit",
+            "run",
+            str(path),
+            "--server.port",
+            str(port),
+            "--server.address",
+            "127.0.0.1",  # doar local: datele BVB sunt pentru uz personal
+            "--server.headless",
+            "true",
+            "--browser.gatherUsageStats",
+            "false",
+        ],
+        check=False,
+    )
 
 
 @app.command()
@@ -750,11 +911,20 @@ def reconcile(
 def status():
     """Rezumat continut baza de date."""
     con = db.connect()
-    typer.echo(con.execute("""
+    typer.echo(
+        con.execute("""
         SELECT source, count(DISTINCT symbol) AS simboluri, count(*) AS randuri,
                min(date) AS de_la, max(date) AS pana_la
         FROM prices_eod GROUP BY source ORDER BY source
-    """).df().to_string(index=False))
+    """)
+        .df()
+        .to_string(index=False)
+    )
     typer.echo("\nUltimele rulari:")
-    typer.echo(con.execute(
-        "SELECT ts, job, status, rows, left(message, 80) AS message FROM ingest_log ORDER BY id DESC LIMIT 5").df().to_string(index=False))
+    typer.echo(
+        con.execute(
+            "SELECT ts, job, status, rows, left(message, 80) AS message FROM ingest_log ORDER BY id DESC LIMIT 5"
+        )
+        .df()
+        .to_string(index=False)
+    )

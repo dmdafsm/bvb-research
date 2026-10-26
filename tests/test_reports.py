@@ -15,13 +15,20 @@ def test_parse_global_row():
     assert r["symbol"] == "BVB"
     assert r["published"] == datetime(2026, 10, 26, 15, 48)
     assert r["title"].startswith("Notificare - rascumparare")
-    assert r["links"] == ["https://bvb.ro/infocont/infocont26/BVB_RO.pdf", "https://bvb.ro/infocont/infocont26/BVB_EN.pdf"]
+    assert r["links"] == [
+        "https://bvb.ro/infocont/infocont26/BVB_RO.pdf",
+        "https://bvb.ro/infocont/infocont26/BVB_EN.pdf",
+    ]
     assert reports.classify(r["title"]) == "buyback"
 
 
 def test_parse_issuer_news_row():
     [r] = reports.parse_issuer_news("SNP", NEWS_ROW)
-    assert (r["symbol"], r["published"], r["title"]) == ("SNP", datetime(2026, 10, 22, 16, 0, 16), "Calendar financiar 2027")
+    assert (r["symbol"], r["published"], r["title"]) == (
+        "SNP",
+        datetime(2026, 10, 22, 16, 0, 16),
+        "Calendar financiar 2027",
+    )
     assert r["links"] == ["https://bvb.ro/infocont/infocont26/SNP_Calendar.pdf"]
 
 
@@ -45,8 +52,14 @@ def test_calendar_from_issuer_fixture():
 
 
 def test_news_matcher_and_feed():
-    match = news.build_matcher([("SNP", "OMV PETROM S.A."), ("TLV", "BANCA TRANSILVANIA S.A."),
-                                ("M", "MED LIFE S.A."), ("EL", "SOCIETATEA ENERGETICA ELECTRICA S.A.")])
+    match = news.build_matcher(
+        [
+            ("SNP", "OMV PETROM S.A."),
+            ("TLV", "BANCA TRANSILVANIA S.A."),
+            ("M", "MED LIFE S.A."),
+            ("EL", "SOCIETATEA ENERGETICA ELECTRICA S.A."),
+        ]
+    )
     assert match("Profitul OMV Petrom a scazut; Banca Transilvania creste") == ["SNP", "TLV"]
     assert match("MedLife cumpara o clinica") == ["M"]
     assert match("Pretul electricitatii") == []  # fara potriviri partiale
@@ -63,11 +76,13 @@ def test_alerts_new_reports_once_and_exdividend(tmp_path):
 
     con = db.connect(tmp_path / "a.duckdb")
     con.execute("INSERT INTO watchlist (symbol) VALUES ('AAA')")
-    con.execute("INSERT INTO reports (symbol, published, title, category) VALUES "
-                "('AAA', now() - INTERVAL 1 HOUR, 'Rezultate T3', 'results'), ('BBB', now(), 'x', 'other')")
+    con.execute(
+        "INSERT INTO reports (symbol, published, title, category) VALUES "
+        "('AAA', now() - INTERVAL 1 HOUR, 'Rezultate T3', 'results'), ('BBB', now(), 'x', 'other')"
+    )
     con.execute("INSERT INTO dividends (symbol, amount, ex_date) VALUES ('AAA', 0.5, current_date + 3)")
     first = alerts.collect(con)
-    assert any("[anunt] AAA" in l for l in first) and not any("BBB" in l for l in first)
-    assert any("[ex-dividend] AAA" in l for l in first)
+    assert any("[anunt] AAA" in line for line in first) and not any("BBB" in line for line in first)
+    assert any("[ex-dividend] AAA" in line for line in first)
     second = alerts.collect(con)
-    assert not any("[anunt]" in l for l in second)  # anuntul nu se repeta
+    assert not any("[anunt]" in line for line in second)  # anuntul nu se repeta

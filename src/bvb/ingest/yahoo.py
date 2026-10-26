@@ -7,7 +7,7 @@ Atentie: 'close' de la Yahoo e ajustat pentru splituri, nu si pentru dividende;
 """
 
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 
@@ -46,7 +46,7 @@ def fetch_chart(client: httpx.Client, ticker: str) -> dict | None:
 
 
 def _local_date(ts: int, gmtoffset: int) -> date:
-    return (datetime.fromtimestamp(ts, tz=timezone.utc) + timedelta(seconds=gmtoffset)).date()
+    return (datetime.fromtimestamp(ts, tz=UTC) + timedelta(seconds=gmtoffset)).date()
 
 
 def parse_chart(symbol: str, chart: dict) -> tuple[list[list], list[list]]:
@@ -62,18 +62,27 @@ def parse_chart(symbol: str, chart: dict) -> tuple[list[list], list[list]]:
         if close is None:
             continue
         volume = quote["volume"][i]
-        prices.append([
-            _local_date(ts, offset), symbol, "yahoo",
-            quote["open"][i], quote["high"][i], quote["low"][i], close,
-            int(volume) if volume is not None else None, adj[i],
-        ])
+        prices.append(
+            [
+                _local_date(ts, offset),
+                symbol,
+                "yahoo",
+                quote["open"][i],
+                quote["high"][i],
+                quote["low"][i],
+                close,
+                int(volume) if volume is not None else None,
+                adj[i],
+            ]
+        )
 
     events = []
     for ev in (chart.get("events", {}).get("dividends") or {}).values():
         events.append([_local_date(ev["date"], offset), symbol, "yahoo", "dividend", ev["amount"], None])
     for ev in (chart.get("events", {}).get("splits") or {}).values():
-        events.append([_local_date(ev["date"], offset), symbol, "yahoo", "split", None,
-                       ev["numerator"] / ev["denominator"]])
+        events.append(
+            [_local_date(ev["date"], offset), symbol, "yahoo", "split", None, ev["numerator"] / ev["denominator"]]
+        )
     return prices, events
 
 
@@ -89,7 +98,8 @@ def store(con, prices: list[list], events: list[list]) -> int:
         )
     if events:
         con.executemany(
-            "INSERT OR REPLACE INTO corporate_events (date, symbol, source, kind, amount, ratio) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO corporate_events (date, symbol, source, kind, amount, ratio) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             events,
         )
     return len(prices)

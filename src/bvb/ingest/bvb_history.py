@@ -8,7 +8,7 @@ Folosit cu aprobarea explicita a utilizatorului, doar pentru uz personal.
 """
 
 import time
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -20,8 +20,20 @@ SOURCE = "bvb_hist"
 TZ = ZoneInfo("Europe/Bucharest")
 SESSION_END = (18, 30)  # dupa aceasta ora bara zilei curente e finala
 
-INDICES = ["BET", "BET-TR", "BET-TRN", "BET-FI", "BET-NG", "BET-EF", "BET-BK",
-           "BET-XT", "BET-XT-TR", "BETPlus", "BETAeRO", "ROTX"]
+INDICES = [
+    "BET",
+    "BET-TR",
+    "BET-TRN",
+    "BET-FI",
+    "BET-NG",
+    "BET-EF",
+    "BET-BK",
+    "BET-XT",
+    "BET-XT-TR",
+    "BETPlus",
+    "BETAeRO",
+    "ROTX",
+]
 
 
 def fetch(client: httpx.Client, symbol: str, adjusted: bool) -> dict:
@@ -47,8 +59,11 @@ def fetch_metadata(client: httpx.Client, symbol: str) -> dict:
     r = client.get(SYMBOLS_URL, params={"symbol": symbol})
     r.raise_for_status()
     d = r.json()
-    return {"sector": d.get("sector") or None, "industry": d.get("industry") or None,
-            "currency": d.get("currency_code") or None}
+    return {
+        "sector": d.get("sector") or None,
+        "industry": d.get("industry") or None,
+        "currency": d.get("currency_code") or None,
+    }
 
 
 def ingest_metadata(con, symbols: list[str], log=print) -> int:
@@ -61,8 +76,10 @@ def ingest_metadata(con, symbols: list[str], log=print) -> int:
             except httpx.HTTPError as e:
                 log(f"{symbol}: eroare {e!r}")
                 continue
-            con.execute("UPDATE instruments SET sector = ?, industry = ?, currency = ? WHERE symbol = ?",
-                        [m["sector"], m["industry"], m["currency"], symbol])
+            con.execute(
+                "UPDATE instruments SET sector = ?, industry = ?, currency = ? WHERE symbol = ?",
+                [m["sector"], m["industry"], m["currency"], symbol],
+            )
             n += 1
             time.sleep(REQUEST_DELAY / 2)
     return n
@@ -83,18 +100,27 @@ def parse(symbol: str, raw: dict, adj: dict | None, until: date) -> list[list]:
         return []
     adj_by_ts = {}
     if adj and adj.get("s") == "ok":
-        adj_by_ts = dict(zip(adj["t"], adj["c"]))
+        adj_by_ts = dict(zip(adj["t"], adj["c"], strict=True))
     rows = []
     for i, ts in enumerate(raw["t"]):
-        day = datetime.fromtimestamp(ts, tz=timezone.utc).date()
+        day = datetime.fromtimestamp(ts, tz=UTC).date()
         close = raw["c"][i]
         if day > until or close is None:
             continue
         volume = raw["v"][i]
-        rows.append([
-            day, symbol, SOURCE, raw["o"][i], raw["h"][i], raw["l"][i], close,
-            int(volume) if volume is not None else None, adj_by_ts.get(ts),
-        ])
+        rows.append(
+            [
+                day,
+                symbol,
+                SOURCE,
+                raw["o"][i],
+                raw["h"][i],
+                raw["l"][i],
+                close,
+                int(volume) if volume is not None else None,
+                adj_by_ts.get(ts),
+            ]
+        )
     return rows
 
 

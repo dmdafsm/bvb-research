@@ -23,7 +23,8 @@ def calendar(con, start=None, end=None) -> pd.DatetimeIndex:
     days = con.execute(
         "SELECT date FROM prices_eod WHERE symbol = ? AND source = 'bvb_hist' "
         "AND date >= coalesce(?, DATE '1990-01-01') AND date <= coalesce(?, DATE '2100-01-01') ORDER BY date",
-        [CALENDAR_INDEX, start, end]).df()["date"]
+        [CALENDAR_INDEX, start, end],
+    ).df()["date"]
     return pd.DatetimeIndex(pd.to_datetime(days))
 
 
@@ -31,9 +32,9 @@ def series(con, symbols: list[str], field: str = "tr_close", start=None, end=Non
     """Serii zilnice pe calendarul BET, reportate inainte (doar dupa prima tranzactie)."""
     q = f"""
         SELECT date, symbol, {field} AS v FROM prices_adj
-        WHERE symbol IN ({','.join('?' * len(symbols))})
+        WHERE symbol IN ({",".join("?" * len(symbols))})
         UNION ALL
-        SELECT date, symbol, close AS v FROM prices WHERE symbol IN ({','.join('?' * len(symbols))})
+        SELECT date, symbol, close AS v FROM prices WHERE symbol IN ({",".join("?" * len(symbols))})
             AND symbol IN (SELECT symbol FROM instruments WHERE market = 'INDEX')
     """
     df = con.execute(q, symbols + symbols).df()
@@ -58,6 +59,7 @@ def benchmark_series(con, start=None, end=None) -> pd.Series:
 
 
 # --- metrici pe o serie de valori (pret / NAV) --------------------------------
+
 
 def returns(values: pd.Series) -> pd.Series:
     return values.dropna().pct_change().dropna()
@@ -129,19 +131,27 @@ def metrics(values: pd.Series, bench: pd.Series | None = None, rf: float = 0.0) 
 
 # --- lichiditate si dividende --------------------------------------------------
 
+
 def liquidity(con, symbols: list[str], end: date, days: int = 365) -> pd.DataFrame:
     """% zile cu tranzactii si valoarea medie zilnica (RON) pe ultimele `days` zile calendaristice."""
     start = end - timedelta(days=days)
     n_days = int((calendar(con, start, end) > pd.Timestamp(start)).sum())  # aceeasi fereastra (start, end]
-    df = con.execute(f"""
+    df = (
+        con.execute(
+            f"""
         SELECT symbol,
                count(*) FILTER (WHERE volume > 0)         AS traded_days,
                sum(coalesce(value, volume * close)) / ?   AS adv_value,
                median(coalesce(value, volume * close)) FILTER (WHERE volume > 0) AS median_value
         FROM prices
-        WHERE symbol IN ({','.join('?' * len(symbols))}) AND date > ? AND date <= ?
+        WHERE symbol IN ({",".join("?" * len(symbols))}) AND date > ? AND date <= ?
         GROUP BY symbol
-    """, [max(n_days, 1), *symbols, start, end]).df().set_index("symbol")
+    """,
+            [max(n_days, 1), *symbols, start, end],
+        )
+        .df()
+        .set_index("symbol")
+    )
     df["pct_days_traded"] = df["traded_days"] / max(n_days, 1)
     return df.reindex(symbols)
 
@@ -151,7 +161,8 @@ def trailing_dividend_yield(con, symbols: list[str], end: date) -> pd.Series:
 
     Dividendele de dinaintea unui eveniment de capital (actiuni gratuite,
     consolidare) sunt aduse la numarul actual de actiuni prin cap_factor."""
-    df = con.execute(f"""
+    df = con.execute(
+        f"""
         WITH d AS (
             SELECT d.symbol, sum(d.amount
                 * coalesce((SELECT arg_max(a.cap_factor, a.date) FROM prices_adj a
@@ -159,17 +170,19 @@ def trailing_dividend_yield(con, symbols: list[str], end: date) -> pd.Series:
                 / coalesce((SELECT arg_max(z.cap_factor, z.date) FROM prices_adj z
                             WHERE z.symbol = d.symbol AND z.date <= ?), 1)) AS div12
             FROM dividends d
-            WHERE d.symbol IN ({','.join('?' * len(symbols))})
+            WHERE d.symbol IN ({",".join("?" * len(symbols))})
               AND coalesce(d.ex_date, d.record_date) > ?::DATE - INTERVAL 1 YEAR
               AND coalesce(d.ex_date, d.record_date) <= ?
             GROUP BY d.symbol
         ), p AS (
             SELECT symbol, arg_max(close, date) AS last_close FROM prices
-            WHERE symbol IN ({','.join('?' * len(symbols))}) AND date <= ? GROUP BY symbol
+            WHERE symbol IN ({",".join("?" * len(symbols))}) AND date <= ? GROUP BY symbol
         )
         SELECT p.symbol, coalesce(d.div12, 0) / p.last_close AS div_yield
         FROM p LEFT JOIN d USING (symbol)
-    """, [end, *symbols, end, end, *symbols, end]).df()
+    """,
+        [end, *symbols, end, end, *symbols, end],
+    ).df()
     return df.set_index("symbol")["div_yield"].reindex(symbols)
 
 
@@ -203,11 +216,19 @@ def stock_report(con, symbol: str, end: date | None = None, rf: float = 0.0) -> 
         m["price_cagr"] = cagr(_window(price, last, years))
         m["bench_cagr"] = cagr(bench.reindex(v.index))
         rows[name] = m
-    info = con.execute(
-        "SELECT name, isin, market, segment, category, activity, shares, listing_date FROM instruments WHERE symbol = ?",
-        [symbol]).df().iloc[0].to_dict()
-    close = con.execute("SELECT arg_max(close, date) FROM prices WHERE symbol = ? AND date <= ?",
-                        [symbol, last.date()]).fetchone()[0]
+    info = (
+        con.execute(
+            "SELECT name, isin, market, segment, category, activity, shares, listing_date "
+            "FROM instruments WHERE symbol = ?",
+            [symbol],
+        )
+        .df()
+        .iloc[0]
+        .to_dict()
+    )
+    close = con.execute(
+        "SELECT arg_max(close, date) FROM prices WHERE symbol = ? AND date <= ?", [symbol, last.date()]
+    ).fetchone()[0]
     info["last_date"] = last.date()
     info["last_close"] = close
     info["market_cap"] = close * info["shares"] if info.get("shares") else None
@@ -217,13 +238,17 @@ def stock_report(con, symbol: str, end: date | None = None, rf: float = 0.0) -> 
     info["adv_value_1y"] = liq["adv_value"]
     divs = con.execute(
         "SELECT fiscal_year, amount, ex_date, pay_date FROM dividends WHERE symbol = ? "
-        "ORDER BY coalesce(ex_date, record_date) DESC NULLS LAST LIMIT 10", [symbol]).df()
+        "ORDER BY coalesce(ex_date, record_date) DESC NULLS LAST LIMIT 10",
+        [symbol],
+    ).df()
     return {"info": info, "windows": pd.DataFrame(rows), "dividends": divs}
 
 
 def screen(con, market: str = "REGS", years: int = 3, end: date | None = None, rf: float = 0.0) -> pd.DataFrame:
-    symbols = [r[0] for r in con.execute(
-        "SELECT symbol FROM instruments WHERE market = ? ORDER BY symbol", [market]).fetchall()]
+    symbols = [
+        r[0]
+        for r in con.execute("SELECT symbol FROM instruments WHERE market = ? ORDER BY symbol", [market]).fetchall()
+    ]
     data = series(con, symbols, end=end)
     bench = benchmark_series(con, end=end)
     last = data.index[-1]
@@ -236,12 +261,22 @@ def screen(con, market: str = "REGS", years: int = 3, end: date | None = None, r
         rows.append({"symbol": s, **{k: m[k] for k in ("cagr", "volatility", "sharpe", "max_drawdown", "beta")}})
     df = pd.DataFrame(rows).set_index("symbol")
     liq = liquidity(con, list(df.index), last.date())
-    info = con.execute(
-        f"SELECT symbol, shares FROM instruments WHERE symbol IN ({','.join('?' * len(df))})", list(df.index)
-    ).df().set_index("symbol")
-    closes = con.execute(
-        f"SELECT symbol, arg_max(close, date) AS close FROM prices WHERE symbol IN ({','.join('?' * len(df))}) "
-        "AND date <= ? GROUP BY symbol", [*df.index, last.date()]).df().set_index("symbol")
+    info = (
+        con.execute(
+            f"SELECT symbol, shares FROM instruments WHERE symbol IN ({','.join('?' * len(df))})", list(df.index)
+        )
+        .df()
+        .set_index("symbol")
+    )
+    closes = (
+        con.execute(
+            f"SELECT symbol, arg_max(close, date) AS close FROM prices WHERE symbol IN ({','.join('?' * len(df))}) "
+            "AND date <= ? GROUP BY symbol",
+            [*df.index, last.date()],
+        )
+        .df()
+        .set_index("symbol")
+    )
     df["market_cap_mn"] = closes["close"] * info["shares"] / 1e6
     df["div_yield"] = trailing_dividend_yield(con, list(df.index), last.date())
     df["adv_value_k"] = liq["adv_value"] / 1e3
