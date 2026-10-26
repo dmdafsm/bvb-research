@@ -268,6 +268,7 @@ def ingest_issuers(
             if symbols and f.stem not in symbols:
                 continue
             _store_issuer(con, f.stem, f.read_text(encoding="utf-8"))
+        reports.normalize(con)
         typer.echo(f"Re-parsate {len(files)} fise")
         return
     if not symbols:
@@ -291,6 +292,7 @@ def ingest_issuers(
             f"{symbol}: {len(data['dividends'])} dividende, {len(data['capital'])} modificari capital, "
             f"{n_reports} rapoarte"
         )
+    reports.normalize(con)
     db.log_ingest(con, "issuers", {"symbols": len(symbols)}, "ok", ok)
     typer.echo(f"Total: {ok}/{len(symbols)} fise")
 
@@ -639,6 +641,9 @@ def ingest_reports(
         n = reports.store_reports(con, reports.parse_global(html))
         typer.echo(f"pana la {day}: {n} rapoarte")
         total += n
+    merged = reports.normalize(con)
+    if merged:
+        typer.echo(f"Unite {merged} rapoarte duplicate")
     db.log_ingest(con, "reports", {"windows": windows}, "ok", total)
 
 

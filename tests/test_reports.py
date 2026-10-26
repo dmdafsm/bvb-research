@@ -86,3 +86,39 @@ def test_alerts_new_reports_once_and_exdividend(tmp_path):
     assert any("[ex-dividend] AAA" in line for line in first)
     second = alerts.collect(con)
     assert not any("[anunt]" in line for line in second)  # anuntul nu se repeta
+
+
+def test_same_report_from_both_sources_is_one_row(tmp_path):
+    from bvb import db
+
+    con = db.connect(tmp_path / "r.duckdb")
+    [g] = reports.parse_global(GLOBAL_ROW)  # 26.10.2026 15:48
+    issuer_row = {**g, "published": datetime(2026, 10, 26, 15, 48, 37), "bvb_type": None, "links": g["links"][:1]}
+    reports.store_reports(con, [g])
+    reports.store_reports(con, [issuer_row])
+    rows = con.execute("SELECT published, bvb_type, url_ro, url_en FROM reports").fetchall()
+    assert rows == [(datetime(2026, 10, 26, 15, 48), "Altele", g["links"][0], g["links"][1])]
+
+
+def test_normalize_merges_existing_duplicates_and_reclassifies(tmp_path):
+    from bvb import db
+
+    con = db.connect(tmp_path / "r.duckdb")
+    con.execute("""
+        INSERT INTO reports (symbol, published, title, category, bvb_type, url_ro, text) VALUES
+        ('H2O', '2026-10-22 20:50:00', 'Schimbari in componenta Consiliului de Supraveghere', 'other', 'Altele', 'u', NULL),
+        ('H2O', '2026-10-22 20:50:30', 'Schimbari in componenta Consiliului de Supraveghere', 'management', NULL, 'u', 'txt'),
+        ('H2O', '2026-10-23 10:00:15', 'Hotarari AGOA', 'other', NULL, NULL, NULL)
+    """)
+    assert reports.normalize(con) == 1
+    rows = con.execute("SELECT published, category, bvb_type, text FROM reports ORDER BY published").fetchall()
+    assert rows == [
+        (
+            datetime(2026, 10, 22, 20, 50),
+            reports.classify("Schimbari in componenta Consiliului de Supraveghere"),
+            "Altele",
+            "txt",
+        ),
+        (datetime(2026, 10, 23, 10, 0), "agm", None, None),
+    ]
+    assert reports.normalize(con) == 0  # idempotent
