@@ -34,7 +34,7 @@
 - Ingestion is idempotent and restartable: upserts or delete-and-replace per symbol/year, a resumable progress table for long runs, raw HTML kept under `data/raw/` so parsing can be re-run without downloading again.
 - Point-in-time correctness: analytics and backtests must only use information available at the simulated date (fiscal data from 1 June of the next year, prices at close, dividends on the ex-date).
 - Only one process can write the DuckDB file. Readers use the published read snapshot ([ADR 0002](docs/engineering/decisions/0002-read-snapshot.md)).
-- Never commit secrets, the database, raw downloads or bulk source files. Small sanitized fixtures under `tests/fixtures/` are allowed.
+- The repository is public ([ADR 0005](docs/engineering/decisions/0005-public-repository.md)). Never commit secrets, the database, raw downloads, bulk source files or real pages and rows copied from BVB. Test fixtures under `tests/fixtures/` are synthetic: the source page's structure with invented issuers and values.
 
 ## Verification and completion
 

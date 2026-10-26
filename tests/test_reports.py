@@ -5,31 +5,32 @@ from bvb.ingest import news, reports
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
-GLOBAL_ROW = """<table id="gvv"><tbody><tr class="odd"> <td> <span><a href="/FinancialInstruments/Details/FinancialInstrumentsDetails.aspx?s=BVB"><b> BVB</b></a></span>&nbsp;<p style="font-size: 11px">RO0000AAA001</p> </td><td>ALFA EXEMPLU S.A.</td><td data-search="x"><input type="submit" name="n" value="Notificare - rascumparare actiuni proprii 19.10-23.10.2026" id="b" class="mLnkbttS"></td><td class="text-right">26.10.2026 15:48</td><td align="right">Altele</td><td align="right"> <a class="aLinks" href="/infocont/infocont26/BVB_RO.pdf">1</a> <a class="aLinks" href="/infocont/infocont26/BVB_EN.pdf">2</a> </td> </tr></tbody></table>"""
+# Randuri sintetice cu structura paginilor BVB (emitent si titluri inventate).
+GLOBAL_ROW = """<table id="gvv"><tbody><tr class="odd"> <td> <span><a href="/FinancialInstruments/Details/FinancialInstrumentsDetails.aspx?s=AAA"><b> AAA</b></a></span>&nbsp;<p style="font-size: 11px">RO0000AAA001</p> </td><td>ALFA EXEMPLU S.A.</td><td data-search="x"><input type="submit" name="n" value="Notificare - rascumparare actiuni proprii 19.10-23.10.2026" id="b" class="mLnkbttS"></td><td class="text-right">26.10.2026 15:48</td><td align="right">Altele</td><td align="right"> <a class="aLinks" href="/infocont/infocont26/AAA_RO.pdf">1</a> <a class="aLinks" href="/infocont/infocont26/AAA_EN.pdf">2</a> </td> </tr></tbody></table>"""
 
-NEWS_ROW = """<table id="gv"><tbody><tr tabindex="1" class="odd"> <td> <div> <div> <input type="submit" name="n" value="Calendar financiar 2027" class="mLnkbttS"> <p class="date">22.10.2026 16:00:16</p> </div> </div> <div> <a href="https://bvb.ro/infocont/infocont26/SNP_Calendar.pdf"><i></i></a> </div> </td></tr></tbody></table>"""
+NEWS_ROW = """<table id="gv"><tbody><tr tabindex="1" class="odd"> <td> <div> <div> <input type="submit" name="n" value="Calendar financiar 2027" class="mLnkbttS"> <p class="date">22.10.2026 16:00:16</p> </div> </div> <div> <a href="https://bvb.ro/infocont/infocont26/AAA_Calendar.pdf"><i></i></a> </div> </td></tr></tbody></table>"""
 
 
 def test_parse_global_row():
     [r] = reports.parse_global(GLOBAL_ROW)
-    assert r["symbol"] == "BVB"
+    assert r["symbol"] == "AAA"
     assert r["published"] == datetime(2026, 10, 26, 15, 48)
     assert r["title"].startswith("Notificare - rascumparare")
     assert r["links"] == [
-        "https://bvb.ro/infocont/infocont26/BVB_RO.pdf",
-        "https://bvb.ro/infocont/infocont26/BVB_EN.pdf",
+        "https://bvb.ro/infocont/infocont26/AAA_RO.pdf",
+        "https://bvb.ro/infocont/infocont26/AAA_EN.pdf",
     ]
     assert reports.classify(r["title"]) == "buyback"
 
 
 def test_parse_issuer_news_row():
-    [r] = reports.parse_issuer_news("SNP", NEWS_ROW)
+    [r] = reports.parse_issuer_news("AAA", NEWS_ROW)
     assert (r["symbol"], r["published"], r["title"]) == (
-        "SNP",
+        "AAA",
         datetime(2026, 10, 22, 16, 0, 16),
         "Calendar financiar 2027",
     )
-    assert r["links"] == ["https://bvb.ro/infocont/infocont26/SNP_Calendar.pdf"]
+    assert r["links"] == ["https://bvb.ro/infocont/infocont26/AAA_Calendar.pdf"]
 
 
 def test_classify():
@@ -45,10 +46,13 @@ def test_classify():
 
 def test_calendar_from_issuer_fixture():
     assert reports.parse_ro_date("29 octombrie 2026 Rezultate") == date(2026, 10, 29)
-    events = reports.parse_calendar("SNP", (FIXTURES / "issuer_SNP.html").read_text())
-    kinds = {e["kind"] for e in events}
-    assert kinds == {"financial", "agm"}
-    assert any(e["date"] == date(2026, 10, 29) and "trimestrul III" in e["event"] for e in events)
+    html = (FIXTURES / "issuer_synthetic.html").read_text()
+    events = reports.parse_calendar("AAA", html)
+    assert {e["kind"] for e in events} == {"financial", "agm"}
+    assert len(events) == 3  # AGA duplicata apare o singura data
+    assert any(e["date"] == date(2026, 10, 29) and "trimestrului III" in e["event"] for e in events)
+    [news_item] = reports.parse_issuer_news("AAA", html)
+    assert news_item["title"] == "Calendar financiar 2027"
 
 
 def test_news_matcher_and_feed():

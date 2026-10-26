@@ -8,7 +8,8 @@ The default branch is main. [Branch policy](branch-policy.md) describes the loca
 - Require the `Repository verification` check from the `Verify` workflow.
 - Prevent force pushes and deletion of the default branch, and limit bypass rights deliberately.
 - Enable secret scanning/push protection, private vulnerability reporting and dependency alerts where supported.
-- Keep the repository private: the [personal-use constraint](security-and-data.md) applies to anything derived from BVB data, including test fixtures.
+- The repository is public ([ADR 0005](decisions/0005-public-repository.md)): it may contain code and documentation, never BVB data. Test fixtures are synthetic. Before changing visibility again or adding files derived from a source, check [security and data](security-and-data.md).
+- Enable secret scanning push protection: on a public repository a pushed secret is exposed immediately.
 
 Workflow permissions are contents:read. Verification needs no deployment, external message or production secret.
 

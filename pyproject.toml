@@ -3,6 +3,8 @@ name = "bvb"
 version = "0.1.0"
 description = "Personal research tool for Bucharest Stock Exchange (BVB) companies"
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "duckdb>=2.0.0",
     "httpx>=0.28.1",

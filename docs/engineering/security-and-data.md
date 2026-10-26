@@ -2,6 +2,7 @@
 
 ## Personal use and terms of the sources
 
+- **Public code, private data** ([ADR 0005](decisions/0005-public-repository.md)): the repository is public; collected data, raw downloads and anything copied from a source page stay on the maintainer's machine. Test fixtures and test strings are synthetic: the structure of the source page with invented issuers and values, never a saved real page.
 - **bvb.ro**: the terms of use (`/Disclaimer.aspx`) allow viewing and a copy for personal, non-commercial use; copying, storing for others or redistributing needs BVB's written consent. The tool therefore stays personal: no hosted deployment, no shared dashboards, no exports meant for third parties, the dashboard bound to `127.0.0.1` (in Docker, published only on the host's `127.0.0.1`, [ADR 0004](decisions/0004-docker-compose.md)), the database and `data/` never committed.
 - **BVB chart API** (`wapi.bvb.ro`): used with the maintainer's explicit approval for personal use, see [ADR 0001](decisions/0001-bvb-chart-api.md). Keep request rates low.
 - **data.gov.ro**: CC-BY 4.0; keep the attribution (Ministerul Finanțelor / data.gov.ro) where the data is shown (dashboard sidebar, README).

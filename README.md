@@ -2,6 +2,10 @@
 
 Instrument personal de analiză pentru companiile listate la BVB. Plan: [docs/plan.md](docs/plan.md), surse: [docs/surse-date.md](docs/surse-date.md).
 
+> **Proiect neoficial, fără legătură cu Bursa de Valori București.** Repository-ul conține doar cod și documentație; nu include date de piață. Datele colectate de pe bvb.ro sunt, conform termenilor BVB (`/Disclaimer.aspx`), doar pentru uz personal, necomercial; copierea, stocarea pentru alții sau redistribuirea cer acordul scris al BVB. Istoricul de prețuri folosește API-ul intern, nedocumentat, al graficului BVB ([ADR 0001](docs/engineering/decisions/0001-bvb-chart-api.md)). Dacă rulezi codul, răspunzi de respectarea termenilor surselor. Nimic din acest proiect nu reprezintă recomandare de investiții.
+>
+> Cod sub licența [MIT](LICENSE). Situațiile financiare de pe data.gov.ro sunt publicate de Ministerul Finanțelor sub CC-BY 4.0.
+
 ## Instalare
 
 ```bash

@@ -15,7 +15,7 @@ Run `python3 scripts/verify.py` from the repository root. It runs, in order:
 | Change | Evidence needed |
 | --- | --- |
 | Documentation | Repository checks; accurate claims about what is implemented. |
-| Parser for a page or file | Fixture test with a saved, minimal real sample (`tests/fixtures/`), including a changed-shape failure case; then one real run and a spot check against the page. |
+| Parser for a page or file | Fixture test with a minimal synthetic sample (`tests/fixtures/`): the real page's structure and quirks with invented issuers and values, plus a changed-shape failure case; then one real run and a spot check against the page. |
 | Price adjustment, dividends, capital events | Hand-computed expected series for each event type (bonus, consolidation, dividend, both on one day); reconciliation on real data (`bvb reconcile`, comparison with the BVB adjusted series). |
 | Analytics, valuation, risk | Small synthetic inputs with independently derived results (CAGR, drawdown, VaR quantiles, ROE averages); point-in-time checks. |
 | Backtest | Single-stock no-cost run equals the total-return series; tax, fees, rebalancing, delisting cases. |
@@ -28,7 +28,7 @@ Use the minimum useful suite for the change; protect invariants and regressions 
 ## Fixtures and isolation
 
 - Tests never touch `data/` or the network. Use `tmp_path` databases and fixtures.
-- Fixtures are minimal: a single issuer page or trading-day table, sanitized and small (the repository check rejects large files).
+- Fixtures are minimal and synthetic: copy the structure of one issuer page or trading-day table (ids, nesting, number and date formats, empty and extra cells), then replace every issuer, name and value. The repository is public; a saved real page would redistribute BVB data.
 - Use deterministic dates; avoid `today()` in assertions unless the test controls the relationship.
 
 ## Honest results
