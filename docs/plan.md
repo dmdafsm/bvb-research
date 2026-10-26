@@ -53,7 +53,7 @@ Reguli de colectare: doar pagini publice, o rulare pe zi, pauze între cereri, c
 - Istoric dividende și evaluare (multipli față de propriul istoric și față de sector).
 - Screener: filtre pe lichiditate, evaluare, randament dividend, calitate.
 
-## Faza 6 — Risc
+## Faza 6 — Risc ✅
 - VaR / CVaR istoric și parametric (1 zi, 10 zile), stres pe scenarii istorice (2008, 2020, 2022).
 - Matrice de corelație cu estimare robustă (shrinkage Ledoit-Wolf), având în vedere zilele fără tranzacții.
 - Risc de concentrare (sector, emitent, stat ca acționar majoritar).

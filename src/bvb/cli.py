@@ -102,13 +102,32 @@ def ingest_indices(
     db.log_ingest(con, "bvb_indices", {"indices": indices}, "ok", sum(counts.values()))
 
 
+@ingest_app.command("metadata")
+def ingest_metadata():
+    """Sector, industrie si moneda pentru toate instrumentele (API grafic BVB)."""
+    con = db.connect()
+    symbols = [r[0] for r in con.execute("SELECT symbol FROM instruments ORDER BY symbol").fetchall()]
+    n = bvb_history.ingest_metadata(con, symbols, log=typer.echo)
+    db.log_ingest(con, "metadata", {"symbols": len(symbols)}, "ok", n)
+    typer.echo(f"Total: {n}/{len(symbols)}")
+
+
 @ingest_app.command("issuers")
 def ingest_issuers(
     symbols: list[str] = typer.Argument(None, help="Simboluri; implicit actiunile neactualizate de --max-age zile."),
     max_age: int = typer.Option(7, help="Re-descarca fisele mai vechi de atatea zile."),
+    from_raw: bool = typer.Option(False, help="Re-parseaza HTML-ul deja salvat, fara descarcare."),
 ):
-    """Fisa emitentului: date de baza, dividende, modificari de capital."""
+    """Fisa emitentului: date de baza, dividende, modificari de capital, actionariat."""
     con = db.connect()
+    if from_raw:
+        files = sorted((issuer.RAW_DIR / "issuer").glob("*.html"))
+        for f in files:
+            if symbols and f.stem not in symbols:
+                continue
+            issuer.store(con, issuer.parse(f.stem, f.read_text(encoding="utf-8")))
+        typer.echo(f"Re-parsate {len(files)} fise")
+        return
     if not symbols:
         symbols = [r[0] for r in con.execute(
             "SELECT symbol FROM instruments WHERE market <> 'INDEX' "
@@ -263,6 +282,67 @@ def backtest(
     if csv:
         pd.DataFrame({"portfolio": r.nav, "benchmark": r.benchmark}).to_csv(csv, index_label="date")
         typer.echo(f"\nNAV salvat in {csv}")
+
+
+@app.command()
+def risk(
+    weights: str = typer.Argument(..., help="Ex: 'TLV=0.3,SNP=0.3,H2O=0.4' sau 'TLV,SNP,H2O'."),
+    value: float = typer.Option(100_000.0, help="Valoarea portofoliului (RON)."),
+    years: float = typer.Option(3.0, help="Fereastra de estimare (ani)."),
+    horizon: int = typer.Option(1, help="Orizont VaR (zile de tranzactionare)."),
+    end: str = typer.Option(None, help="Data evaluarii YYYY-MM-DD (implicit ultima zi)."),
+    participation: float = typer.Option(0.2, help="Cota maxima din volumul zilnic la lichidare."),
+):
+    """Risc de portofoliu: VaR/CVaR, contributii, corelatii, stres, concentrare, lichiditate."""
+    from datetime import date as _date
+
+    from bvb import portfolio
+    from bvb import risk as risk_mod
+
+    w = portfolio.parse_weights(weights)
+    r = risk_mod.report(db.connect(), w, value=value, years=years, horizon=horizon, participation=participation,
+                        end=_date.fromisoformat(end) if end else None)
+    c = r.concentration
+    typer.echo(f"Portofoliu {value:,.0f} RON, estimare {r.window[0]} – {r.window[1]}, "
+               f"volatilitate anuala {c['portfolio_vol']:.1%}, shrinkage covarianta {r.shrinkage:.2f}")
+    for n in r.notes:
+        typer.echo(f"  ! {n}")
+
+    typer.echo(f"\nVaR / CVaR pe {horizon} zi(le) (pierdere):")
+    v = r.var.copy()
+    for col in ("hist_var", "hist_cvar", "param_var", "param_cvar"):
+        v[col] = v[col].map(lambda x: f"{x:.2%}")
+    for col in ("hist_var_ron", "hist_cvar_ron"):
+        v[col] = v[col].map(lambda x: f"{x:,.0f}")
+    v.index = [f"{x:.0%}" for x in v.index]
+    typer.echo(v.to_string())
+
+    typer.echo("\nPozitii:")
+    p = r.positions.copy()
+    for col in ("weight", "volatility", "risk_contribution", "pct_days_traded"):
+        p[col] = p[col].map(lambda x: f"{x:.1%}" if x == x else "")
+    p["beta_weekly"] = p["beta_weekly"].map(lambda x: f"{x:.2f}")
+    p["days_to_liquidate"] = p["days_to_liquidate"].map(lambda x: f"{x:.1f}" if x == x else "n/a")
+    typer.echo(p.to_string())
+
+    typer.echo("\nCorelatii (randamente saptamanale):")
+    typer.echo(r.correlation.round(2).to_string())
+
+    typer.echo("\nScenarii de stres (randament total):")
+    s = r.stress.copy()
+    for col in ("portfolio", "benchmark"):
+        s[col] = s[col].map(lambda x: f"{x:.1%}")
+    typer.echo(s.fillna("").to_string(index=False))
+
+    typer.echo("\nConcentrare:")
+    typer.echo(f"  HHI {c['hhi']:.3f} (echivalent {c['effective_n']:.1f} pozitii egale), "
+               f"cea mai mare pozitie {c['top1']:.0%}, top 3 {c['top3']:.0%}")
+    typer.echo("  Pe sectoare: " + ", ".join(f"{k} {v:.0%}" for k, v in r.by_sector.items()))
+    typer.echo(f"  Companii controlate de stat (>= 50%): {c['state_controlled']:.0%}, "
+               f"cu orice participatie de stat: {c['state_any']:.0%}; in alte monede decat RON: {c['non_ron']:.0%}")
+    typer.echo(f"\nLichiditate (max {participation:.0%} din valoarea medie zilnica, ultimele 6 luni): "
+               f"vandabil in 1 zi {c['liquidatable_1d']:.0%}, 5 zile {c['liquidatable_5d']:.0%}, "
+               f"20 zile {c['liquidatable_20d']:.0%}")
 
 
 @app.command()

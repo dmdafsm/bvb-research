@@ -1,6 +1,6 @@
 """Fisa emitentului de pe bvb.ro: date de baza, dividende, modificari de capital.
 
-Pagina: /FinancialInstruments/Details/FinancialInstrumentsDetails.aspx?s=<SIMBOL>
+Pagina (tab-urile Sumar si Emitent, plus structura actionariatului): /FinancialInstruments/Details/FinancialInstrumentsDetails.aspx?s=<SIMBOL>
 - tab "Sumar": ISIN, segment, categorie, numar actiuni, valoare nominala;
 - tab "Emitent": profil (CUI, domeniu), istoric dividende (`gvDividend`),
   modificari capital social (`gvMCapSoc`).
@@ -8,6 +8,7 @@ Tab-urile sunt postback-uri ASP.NET, deci le apasam in browser si salvam
 tabelele (cu toate randurile DataTables) intr-un singur HTML, parsat separat.
 """
 
+import re
 import time
 from datetime import date, datetime
 
@@ -153,12 +154,30 @@ def parse(symbol: str, html: str) -> dict:
             "nominal_before": parse_number(cells[7]) if cells[7] else None,
             "nominal_after": parse_number(cells[8]) if cells[8] else None,
         })
-    return {"instrument": instrument, "dividends": dividends, "capital": capital}
+    shareholders = []
+    holders = tree.css_first("table#gvStructuraActionari")
+    detail = holders.css_first("table#gvDetails") if holders is not None else None
+    if detail is not None:
+        m = re.search(r"Din data:\s*(\d{2}\.\d{2}\.\d{4})", holders.text())
+        as_of = _date(m.group(1)) if m else None
+        for tr in detail.css("tr"):
+            cells = [td.text(strip=True) for td in tr.css("td")]
+            if len(cells) < 3 or cells[0].upper() == "TOTAL":
+                continue
+            shareholders.append({
+                "symbol": symbol,
+                "as_of": as_of,
+                "holder": cells[0],
+                "shares": int(parse_number(cells[1])) if cells[1] else None,
+                "pct": parse_number(cells[2].replace("%", "")),
+            })
+    return {"instrument": instrument, "dividends": dividends, "capital": capital, "shareholders": shareholders}
 
 
 INSTRUMENT_FIELDS = ["name", "isin", "segment", "category", "status", "cui", "activity", "website",
                      "shares", "nominal_value", "listing_date"]
 DIVIDEND_FIELDS = ["symbol", "fiscal_year", "amount", "agm_date", "record_date", "ex_date", "declared_date", "pay_date"]
+SHAREHOLDER_FIELDS = ["symbol", "as_of", "holder", "shares", "pct"]
 CAPITAL_FIELDS = ["symbol", "change_date", "agm_date", "ref_date", "record_date", "operation",
                   "shares_before", "shares_after", "nominal_before", "nominal_after"]
 
@@ -174,6 +193,12 @@ def store(con, data: dict) -> None:
     # Tabelele de pe fisa sunt istoricul complet: le inlocuim integral.
     con.execute("DELETE FROM dividends WHERE symbol = ?", [symbol])
     con.execute("DELETE FROM capital_changes WHERE symbol = ?", [symbol])
+    con.execute("DELETE FROM shareholders WHERE symbol = ?", [symbol])
+    if data["shareholders"]:
+        con.executemany(
+            f"INSERT INTO shareholders ({', '.join(SHAREHOLDER_FIELDS)}) VALUES ({', '.join('?' * len(SHAREHOLDER_FIELDS))})",
+            [[h[f] for f in SHAREHOLDER_FIELDS] for h in data["shareholders"]],
+        )
     if data["dividends"]:
         con.executemany(
             f"INSERT INTO dividends ({', '.join(DIVIDEND_FIELDS)}) VALUES ({', '.join('?' * len(DIVIDEND_FIELDS))})",

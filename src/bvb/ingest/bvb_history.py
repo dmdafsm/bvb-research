@@ -39,6 +39,35 @@ def fetch(client: httpx.Client, symbol: str, adjusted: bool) -> dict:
     return r.json()
 
 
+SYMBOLS_URL = "https://wapi.bvb.ro/api/symbols"
+
+
+def fetch_metadata(client: httpx.Client, symbol: str) -> dict:
+    """Sector, industrie si moneda din API-ul graficului."""
+    r = client.get(SYMBOLS_URL, params={"symbol": symbol})
+    r.raise_for_status()
+    d = r.json()
+    return {"sector": d.get("sector") or None, "industry": d.get("industry") or None,
+            "currency": d.get("currency_code") or None}
+
+
+def ingest_metadata(con, symbols: list[str], log=print) -> int:
+    headers = {"User-Agent": USER_AGENT, "Referer": f"{BVB_BASE}/"}
+    n = 0
+    with httpx.Client(headers=headers, timeout=60) as client:
+        for symbol in symbols:
+            try:
+                m = fetch_metadata(client, symbol)
+            except httpx.HTTPError as e:
+                log(f"{symbol}: eroare {e!r}")
+                continue
+            con.execute("UPDATE instruments SET sector = ?, industry = ?, currency = ? WHERE symbol = ?",
+                        [m["sector"], m["industry"], m["currency"], symbol])
+            n += 1
+            time.sleep(REQUEST_DELAY / 2)
+    return n
+
+
 def last_complete_day(now: datetime | None = None) -> date:
     """Ultima zi a carei bara e finala: azi dupa 18:30, altfel ieri."""
     now = (now or datetime.now(TZ)).astimezone(TZ)
