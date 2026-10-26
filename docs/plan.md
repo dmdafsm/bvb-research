@@ -47,7 +47,7 @@ Reguli de colectare: doar pagini publice, o rulare pe zi, pauze între cereri, c
 3. Rapoarte trimestriale (PDF): extragere semi-automată (tabele + Claude API pentru structurare), cu validare manuală.
 4. Indicatori derivați: P/E, P/BV, EV/EBITDA, ROE, ROA, marjă, datorie/capital, randament dividend, payout, creștere multi-an.
 
-## Faza 5 — Analiză pe acțiune
+## Faza 5 — Analiză pe acțiune ✅ (fără multipli de evaluare — depind de Faza 4)
 - Randamente (simple/log), volatilitate (rolling), beta și corelație față de BET, drawdown maxim.
 - **Lichiditate**: valoare medie zilnică tranzacționată, % zile fără tranzacții, spread estimat. Esențial pe BVB.
 - Istoric dividende și evaluare (multipli față de propriul istoric și față de sector).
@@ -60,7 +60,7 @@ Reguli de colectare: doar pagini publice, o rulare pe zi, pauze între cereri, c
 - Risc de lichiditate: câte zile durează lichidarea poziției la X% din volumul mediu.
 - Risc valutar pentru instrumentele în EUR/USD.
 
-## Faza 7 — Portofolii de test
+## Faza 7 — Portofolii de test ✅ backtest (construcția optimizată și what-if rămân de făcut)
 - Definire portofolii ipotetice (ponderi sau număr de acțiuni, dată start).
 - Backtest cu reinvestire dividende, impozit pe dividende, comision broker, rebalansare periodică.
 - Benchmark: BET-TR. Metrici: CAGR, volatilitate, Sharpe/Sortino (rata fără risc din titluri de stat/ROBOR), drawdown, tracking error.

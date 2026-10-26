@@ -147,6 +147,124 @@ def adjust_cmd(
                    f"miscari suspecte: {summary['suspicious'].sum()}, dividende sarite: {summary['div_skipped'].sum()}")
 
 
+PCT = {"cagr", "price_cagr", "bench_cagr", "volatility", "max_drawdown", "tracking_error",
+       "div_yield", "pct_days_traded", "div_yield_12m", "pct_days_traded_1y"}
+
+
+def _fmt(df):
+    df = df.copy()
+    for col in df.columns:
+        if col in PCT:
+            df[col] = df[col].map(lambda x: f"{x:.1%}" if x == x else "")
+        elif df[col].dtype.kind == "f":
+            df[col] = df[col].map(lambda x: f"{x:,.2f}" if x == x else "")
+    return df
+
+
+@app.command()
+def stock(
+    symbol: str,
+    rf: float = typer.Option(0.0, help="Rata fara risc anuala pentru Sharpe/Sortino (ex. 0.06)."),
+):
+    """Raport pe o actiune: randamente, risc, lichiditate, dividende."""
+    from bvb import analytics
+
+    r = analytics.stock_report(db.connect(), symbol.upper(), rf=rf)
+    i = r["info"]
+    typer.echo(f"{symbol.upper()} — {i['name']} ({i['isin']}, {i['market']}, {i['segment']} {i['category']})")
+    typer.echo(f"Activitate: {i['activity']}")
+    cap = f"{i['market_cap'] / 1e6:,.0f} mil. RON" if i["market_cap"] else "n/a"
+    typer.echo(f"Ultimul pret: {i['last_close']} ({i['last_date']}), capitalizare {cap}, "
+               f"randament dividend 12 luni {i['div_yield_12m']:.1%}")
+    typer.echo(f"Lichiditate 1 an: tranzactii in {i['pct_days_traded_1y']:.0%} din zile, "
+               f"valoare medie zilnica {i['adv_value_1y']:,.0f} RON\n")
+    w = r["windows"].T.infer_objects()
+    w = w[["cagr", "price_cagr", "bench_cagr", "volatility", "sharpe", "sortino", "max_drawdown",
+           "dd_peak", "dd_trough", "beta", "corr", "tracking_error", "info_ratio"]]
+    typer.echo("Randament total (dividende brute reinvestite) vs BET-TR:")
+    for col in ("sharpe", "sortino", "beta", "corr", "info_ratio"):
+        w[col] = w[col].astype(float)
+    typer.echo(_fmt(w).T.to_string())
+    if len(r["dividends"]):
+        typer.echo("\nUltimele dividende:")
+        typer.echo(r["dividends"].to_string(index=False))
+
+
+@app.command()
+def screen(
+    market: str = typer.Option("REGS", help="Piata: REGS, XRS1 (AeRO) etc."),
+    years: int = typer.Option(3, help="Fereastra pentru metrici (ani)."),
+    min_traded: float = typer.Option(0.0, help="Elimina actiunile tranzactionate in mai putin de atatea zile (0-1)."),
+    sort: str = typer.Option("market_cap_mn", help="Coloana de sortare."),
+    top: int = typer.Option(40),
+):
+    """Tabel comparativ: capitalizare, randament, risc, dividend, lichiditate."""
+    from bvb import analytics
+
+    df = analytics.screen(db.connect(), market, years)
+    df = df[df["pct_days_traded"].fillna(0) >= min_traded]
+    df = df.sort_values(sort, ascending=sort in ("volatility", "beta"))
+    typer.echo(f"{market}, fereastra {years} ani, randament total vs BET-TR:")
+    typer.echo(_fmt(df.head(top)).to_string())
+
+
+@app.command()
+def backtest(
+    weights: str = typer.Argument(..., help="Ex: 'TLV=0.3,SNP=0.3,H2O=0.4' sau 'TLV,SNP,H2O' (ponderi egale)."),
+    start: str = typer.Option(None, help="Data start YYYY-MM-DD (implicit: prima zi comuna)."),
+    end: str = typer.Option(None, help="Data sfarsit YYYY-MM-DD."),
+    capital: float = typer.Option(100_000.0),
+    rebalance: str = typer.Option("none", help="none | monthly | quarterly | yearly"),
+    fee: float = typer.Option(0.0025, help="Comision pe tranzactie (0.0025 = 0,25%)."),
+    tax: str = typer.Option("auto", help="'auto' = cotele istorice de impozit pe dividende, sau o cota fixa (ex. 0)."),
+    dividends: str = typer.Option("drip", help="drip (reinvestite in aceeasi actiune) | cash"),
+    rf: float = typer.Option(0.0, help="Rata fara risc anuala pentru Sharpe/Sortino."),
+    csv: str = typer.Option(None, help="Salveaza NAV-ul zilnic (portofoliu + benchmark) in acest CSV."),
+):
+    """Backtest de portofoliu cu dividende, impozit, comisioane si rebalansare, vs BET-TR."""
+    from datetime import date as _date
+
+    from bvb import portfolio
+
+    cfg = portfolio.Config(
+        weights=portfolio.parse_weights(weights),
+        start=_date.fromisoformat(start) if start else None,
+        end=_date.fromisoformat(end) if end else None,
+        capital=capital, rebalance=rebalance, fee=fee,
+        tax=tax if tax == "auto" else float(tax), dividends=dividends, rf=rf,
+    )
+    r = portfolio.backtest(db.connect(), cfg)
+    m = r.metrics
+    typer.echo(f"Portofoliu: {', '.join(f'{s} {w:.0%}' for s, w in cfg.weights.items())}")
+    typer.echo(f"Perioada: {r.nav.index[0].date()} – {r.nav.index[-1].date()}, rebalansare {rebalance}, "
+               f"comision {fee:.2%}, impozit dividende {tax}, dividende {dividends}")
+    for n in r.notes:
+        typer.echo(f"  ! {n}")
+    typer.echo("")
+    rows = [
+        ("Valoare finala", f"{m['final_value']:,.0f}", f"{r.benchmark.iloc[-1]:,.0f}"),
+        ("CAGR", f"{m['cagr']:.2%}", f"{m['bench_cagr']:.2%}"),
+        ("Volatilitate", f"{m['volatility']:.2%}", f"{m['bench_volatility']:.2%}"),
+        ("Max drawdown", f"{m['max_drawdown']:.2%} ({m['dd_peak']} → {m['dd_trough']})", f"{m['bench_max_drawdown']:.2%}"),
+        ("Sharpe / Sortino", f"{m['sharpe']:.2f} / {m['sortino']:.2f}", ""),
+        ("Beta / corelatie", f"{m['beta']:.2f} / {m['corr']:.2f}", ""),
+        ("Tracking error / IR", f"{m['tracking_error']:.2%} / {m['info_ratio']:.2f}", ""),
+        ("Dividende brute / impozit", f"{m['dividends_gross']:,.0f} / {m['dividend_tax']:,.0f}", ""),
+        ("Comisioane", f"{m['fees_paid']:,.0f}", ""),
+        ("Rulaj anual", f"{m['turnover_per_year']:.0%}", ""),
+    ]
+    w = max(len(r_[0]) for r_ in rows)
+    typer.echo(f"{'':{w}}  {'Portofoliu':<40}  BET-TR")
+    for name, p, b in rows:
+        typer.echo(f"{name:{w}}  {p:<40}  {b}")
+    yr = portfolio.yearly_returns(r)
+    typer.echo("\nRandament pe ani:")
+    typer.echo(yr.map(lambda x: f"{x:.1%}").to_string())
+    if csv:
+        pd.DataFrame({"portfolio": r.nav, "benchmark": r.benchmark}).to_csv(csv, index_label="date")
+        typer.echo(f"\nNAV salvat in {csv}")
+
+
 @app.command()
 def reconcile(
     other: str = typer.Option("bvb_hist", help="Sursa comparata cu sumarul BVB: bvb_hist | yahoo."),

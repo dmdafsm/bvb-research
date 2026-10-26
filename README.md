@@ -39,6 +39,19 @@ uv run bvb adjust                # recalculeaza prices_adj (adj_close, tr_close)
 - `adjust_events`: evenimentele aplicate (`capital`, `capital_derived`, `unknown`) și salturile BVB tratate ca dividend.
 - Raportul „mișcări suspecte” = salturi > 40% care persistă 5 zile în randamentul total; majoritatea sunt acțiuni nelichide din anii '90–2000.
 
+## Analiză și backtest
+
+```bash
+uv run bvb stock TLV                              # randament/risc pe 1/3/5/10 ani vs BET-TR, lichiditate, dividende
+uv run bvb screen --years 3 --min-traded 0.8      # tabel comparativ actiuni REGS
+uv run bvb backtest "TLV=0.4,SNP=0.3,H2O=0.3" --start 2020-01-01 --rebalance quarterly
+uv run bvb backtest "TLV,SNP" --tax 0 --fee 0 --csv nav.csv
+```
+
+- Randamentele folosesc `tr_close` (dividende brute reinvestite); benchmark BET-TR, prelungit cu BET (fără dividende) înainte de 2014-09-19.
+- Backtest: tranzacții la închidere, comision procentual, impozit pe dividende pe cotele istorice (`--tax auto`: 16% până în 2015, 5% 2016–2022, 8% 2023–2024, 10% 2025, 16% din 2026), dividende reinvestite în aceeași acțiune (`drip`) sau păstrate cash.
+- În zilele fără tranzacții prețul e reportat: pentru acțiuni nelichide volatilitatea e subestimată și execuția e optimistă — verifică mereu coloana de lichiditate.
+
 ## Teste
 
 ```bash
