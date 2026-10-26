@@ -34,20 +34,20 @@ Reguli de colectare: doar pagini publice, o rulare pe zi, pauze între cereri, c
 - Modificări capital social: splituri, consolidări, majorări cu drept de preferință.
 - **Prețuri ajustate** calculate de noi (factor de ajustare cumulativ), validate cu Yahoo și cu BET vs BET-TR.
 
-## Faza 3 — Anunțuri și calendar
+## Faza 3 — Anunțuri și calendar ✅
 - Index rapoarte curente: simbol, dată, tip, titlu, link PDF; descărcare PDF pentru simbolurile urmărite.
 - Clasificare pe categorii: AGA, dividende, art. 19 (tranzacții management), răscumpărări, contracte, rezultate.
 - Calendar financiar + AGA → „ce urmează săptămâna asta” pentru portofoliu.
 - Extragere text din PDF + căutare full-text; opțional rezumat cu Claude API.
 - Feed RSS (ZF, Profit.ro) filtrat pe emitenți urmăriți.
 
-## Faza 4 — Date fundamentale
+## Faza 4 — Date fundamentale ✅ (data.gov.ro; rapoartele trimestriale PDF rămân neextrase)
 1. ESEF (filings.xbrl.org, xBRL-JSON): rapoarte anuale structurate → venituri, profit net, active, capitaluri proprii, datorii, cash-flow operațional. Mapare LEI ↔ simbol prin GLEIF.
 2. data.gov.ro: bilanțuri anuale pe CUI (inclusiv filiale necotate) ca sursă complementară.
 3. Rapoarte trimestriale (PDF): extragere semi-automată (tabele + Claude API pentru structurare), cu validare manuală.
 4. Indicatori derivați: P/E, P/BV, EV/EBITDA, ROE, ROA, marjă, datorie/capital, randament dividend, payout, creștere multi-an.
 
-## Faza 5 — Analiză pe acțiune ✅ (fără multipli de evaluare — depind de Faza 4)
+## Faza 5 — Analiză pe acțiune ✅ (multipli de evaluare în `bvb valuation` / `bvb fundamentals`)
 - Randamente (simple/log), volatilitate (rolling), beta și corelație față de BET, drawdown maxim.
 - **Lichiditate**: valoare medie zilnică tranzacționată, % zile fără tranzacții, spread estimat. Esențial pe BVB.
 - Istoric dividende și evaluare (multipli față de propriul istoric și față de sector).
@@ -67,7 +67,7 @@ Reguli de colectare: doar pagini publice, o rulare pe zi, pauze între cereri, c
 - Construcție: ponderi egale, minimă varianță, risk parity, cu constrângeri de lichiditate.
 - Analiză „what-if”: adaug/scot o poziție → impact asupra riscului.
 
-## Faza 8 — Interfață
+## Faza 8 — Interfață ✅ (Streamlit + alerte; programarea automată rămâne de configurat)
 - Streamlit: pagină emitent (grafic, fundamentale, dividende, anunțuri), screener, portofolii, risc, calendar.
 - Alerte locale (notificare macOS): anunț nou pentru un emitent urmărit, ex-dividend apropiat, mișcare > X%.
 

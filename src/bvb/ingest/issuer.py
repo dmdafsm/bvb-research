@@ -3,7 +3,8 @@
 Pagina (tab-urile Sumar si Emitent, plus structura actionariatului): /FinancialInstruments/Details/FinancialInstrumentsDetails.aspx?s=<SIMBOL>
 - tab "Sumar": ISIN, segment, categorie, numar actiuni, valoare nominala;
 - tab "Emitent": profil (CUI, domeniu), istoric dividende (`gvDividend`),
-  modificari capital social (`gvMCapSoc`).
+  modificari capital social (`gvMCapSoc`);
+- tab "Stiri": rapoartele curente din ultimul an (`gv`), parsate in `reports`.
 Tab-urile sunt postback-uri ASP.NET, deci le apasam in browser si salvam
 tabelele (cu toate randurile DataTables) intr-un singur HTML, parsat separat.
 """
@@ -51,10 +52,15 @@ def fetch_snapshots(symbols: list[str]):
                     page.wait_for_selector("#ctl00_body_ctl02_CompanyProfile_dvIssProfile", timeout=30_000)
                     page.wait_for_load_state("networkidle")
                     issuer = page.evaluate(SNAPSHOT_JS)
+                    page.click("input[type=submit][value='Stiri']")
+                    page.wait_for_selector("table#gv", timeout=30_000)
+                    page.wait_for_load_state("networkidle")
+                    news = page.evaluate(SNAPSHOT_JS)
                 except Exception as e:  # o fisa lipsa nu opreste restul
                     yield symbol, None, e
                     continue
-                yield symbol, f"<html><body>\n{summary}\n<hr id='emitent'>\n{issuer}\n</body></html>", None
+                yield symbol, (f"<html><body>\n{summary}\n<hr id='emitent'>\n{issuer}\n"
+                               f"<hr id='stiri'>\n{news}\n</body></html>"), None
                 time.sleep(REQUEST_DELAY)
         finally:
             browser.close()

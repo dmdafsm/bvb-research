@@ -177,15 +177,6 @@ def load(con, symbol: str):
 
 def run(con, symbols: list[str], log=print) -> pd.DataFrame:
     """Recalculeaza `prices_adj` si `adjust_events` pentru simboluri; intoarce un rezumat."""
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS prices_adj (
-            date DATE, symbol VARCHAR, close DOUBLE, cap_factor DOUBLE, div_factor DOUBLE,
-            adj_close DOUBLE, tr_close DOUBLE, PRIMARY KEY (date, symbol))
-    """)
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS adjust_events (
-            symbol VARCHAR, date DATE, kind VARCHAR, ratio DOUBLE)
-    """)
     summary = []
     for symbol in symbols:
         prices, dividends, capital = load(con, symbol)
