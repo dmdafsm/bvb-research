@@ -20,6 +20,9 @@ SOURCE = "bvb_hist"
 TZ = ZoneInfo("Europe/Bucharest")
 SESSION_END = (18, 30)  # dupa aceasta ora bara zilei curente e finala
 
+INDICES = ["BET", "BET-TR", "BET-TRN", "BET-FI", "BET-NG", "BET-EF", "BET-BK",
+           "BET-XT", "BET-XT-TR", "BETPlus", "BETAeRO", "ROTX"]
+
 
 def fetch(client: httpx.Client, symbol: str, adjusted: bool) -> dict:
     params = {
