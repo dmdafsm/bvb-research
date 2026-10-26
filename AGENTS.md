@@ -12,7 +12,7 @@
 ## Product and architecture baseline
 
 - The product is a **personal** research tool for companies listed on the Bucharest Stock Exchange (BVB): end-of-day prices and adjusted/total-return series, issuer data, dividends and capital changes, annual fundamentals and valuation, announcements, calendar and news, per-stock analytics, portfolio backtests and risk, a local dashboard and alerts.
-- Personal, non-commercial use is a hard constraint (BVB terms of use, [ADR 0001](docs/engineering/decisions/0001-bvb-chart-api.md)). Do not build features that publish or redistribute BVB data: no hosted multi-user deployment, public dashboards or data exports meant for others. The dashboard listens on localhost only.
+- Personal, non-commercial use is a hard constraint (BVB terms of use, [ADR 0001](docs/engineering/decisions/0001-bvb-chart-api.md)). Do not build features that publish or redistribute BVB data: no hosted multi-user deployment, public dashboards or data exports meant for others. The dashboard listens on localhost only; in Docker it is published only on the host's `127.0.0.1` ([ADR 0004](docs/engineering/decisions/0004-docker-compose.md)).
 - Python 3.12 with `uv`, a single package `bvb` under `src/`, a Typer CLI, DuckDB as the local store and Streamlit for the dashboard. See [the architecture](docs/architecture.md).
 - Data enters only through `bvb ingest ...` commands. Analytics, the CLI reports and the dashboard read the database and never call a remote source.
 - Keep things simple: modules are plain Python files with functions; no ORM, service layer, background daemon or new infrastructure by default. A justified departure needs a short [decision record](docs/engineering/decisions/template.md).
